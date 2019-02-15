@@ -1,0 +1,8 @@
+dash==0.37.0
+dash-core-components==0.43.1
+dash-html-components==0.13.5
+dash-renderer==0.18.0
+dash-table==3.4.0
+decorator==4.3.0
+arrow==0.13.0
+pandas==0.24.0
