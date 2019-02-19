@@ -13,7 +13,7 @@ import random
 import plotly.graph_objs as go
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 server = app.server
 
@@ -27,8 +27,8 @@ def selector(requirements):
     the required values provided in the dictionary requirements which looks like, for example, 
     {'age': '13-17', 'gender': 'f',...}
     """
-    
-    if not (set(requirements) - {'all'} <= set(df.columns)):
+    print(set(requirements))
+    if not (set(requirements) - {'all'}) <= set(df.columns):
         raise Exception('wrong user attributes!')
         
     out = df
@@ -52,6 +52,9 @@ colors = ['orange', '#2C72EC', '#24C173']
 
 def make_number_reviews_scatter(df):
 
+	if df.empty:
+		return go.Scatter()
+
 	d1 = df[['date_of_experience', 'id']].groupby(['date_of_experience']).count().reset_index()
 
 	return go.Scatter(x=d1.date_of_experience, 
@@ -61,6 +64,8 @@ def make_number_reviews_scatter(df):
                     name='n', text='some characteristic words',)
 
 app.layout = html.Div(children=[
+
+						html.P(style={'height': '15%'}),
 
 						html.Div(children=
 									[html.H3(children='Brisbane Attractions', style={'textAlign': 'center'}),
@@ -137,6 +142,7 @@ def update_graph(required_age_group, required_gender, required_tourist_type):
     					            yaxis={'title': 'Number of Reviews'},
     					            margin={'l': 40, 'b': 80, 't': 10, 'r': 10},
     					            legend={'x': 0, 'y': 1},
+    					            height=400,
     					            hovermode='closest'
     					        )
 			}
