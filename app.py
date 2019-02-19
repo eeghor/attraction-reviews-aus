@@ -46,7 +46,7 @@ genders = ['m', 'f']
 
 age_groups = [ag for ag in set(df['age']) if ag] 
 
-# trav_types = ['foodie', 'luxury traveller', 'beach goer']
+tourist_types = [c for c in df.columns if {'yes', 'no'} <= set(df[c])]
 
 colors = ['orange', '#2C72EC', '#24C173']
 
@@ -63,8 +63,9 @@ def make_number_reviews_scatter(df):
 app.layout = html.Div(children=[
 
 						html.Div(children=
-									[html.H2(children='Brisbane Attractions', style={'textAlign': 'center'}),
-										html.Span(dcc.Markdown("""compare **opinions** by tourist segment"""), style={'textAlign': 'center'})]),
+									[html.H3(children='Brisbane Attractions', style={'textAlign': 'center'}),
+										html.Span(dcc.Markdown("""compare **opinions** by tourist segment"""), 
+											style={'textAlign': 'center'})]),
 
     					dcc.Graph(
     					    id='brisb-reviews',
@@ -98,6 +99,16 @@ app.layout = html.Div(children=[
     								id='gender-dropdown',
     					    		options=[{'label': g, 'value': g} for g in genders] + [{'label': 'all', 'value': 'all'}],
        					 			value='all')
+    									], style={'width': '20%', 'display': 'inline-block'}),
+						
+						html.Div(children=[
+
+    							html.Label('tourist type'),
+
+    							dcc.Dropdown(
+    								id='ttype-dropdown',
+    					    		options=[{'label': g, 'value': g} for g in tourist_types] + [{'label': 'all', 'value': 'all'}],
+       					 			value='all')
     									], style={'width': '20%', 'display': 'inline-block'})
 						])
 
@@ -105,9 +116,10 @@ app.layout = html.Div(children=[
 @app.callback(
     dash.dependencies.Output('brisb-reviews', 'figure'), # will be updating the figure part of the Graph
     [dash.dependencies.Input('ag-dropdown', 'value'),
-    dash.dependencies.Input('gender-dropdown', 'value')])  # what inputs need to be monitored to update the output (figure in Graph)?
+    	dash.dependencies.Input('gender-dropdown', 'value'),
+    		dash.dependencies.Input('ttype-dropdown', 'value')])  # what inputs need to be monitored to update the output (figure in Graph)?
 
-def update_graph(required_age_group, required_gender):
+def update_graph(required_age_group, required_gender, required_tourist_type):
 
 	# select data from the required_age_group
 	# d = selector({'age': required_age_group})
@@ -118,7 +130,8 @@ def update_graph(required_age_group, required_gender):
 	return {
 
 			'data': [make_number_reviews_scatter(selector({'age': required_age_group, 
-															'gender': required_gender}))],
+															'gender': required_gender,
+																required_tourist_type: 'yes'}))],
 			'layout': go.Layout(
     					            xaxis={'title': 'Date'},
     					            yaxis={'title': 'Number of Reviews'},
