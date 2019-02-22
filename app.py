@@ -13,6 +13,8 @@ import plotly.graph_objs as go
 df = pd.read_csv('data/brisb.csv.gz', parse_dates=['date_of_experience'],
 											infer_datetime_format=True)
 
+print(f'{len(df):,} reviews...')
+
 genders = ['all', 'm', 'f']
 age_groups = ['all'] + sorted([ag for ag in set(df['age']) if '-' in str(ag)], key=lambda x: int(x.split('-')[0]))
 tourist_types = ['all'] + [c for c in df.columns if {'yes', 'no'} <= set(df[c])]
@@ -22,33 +24,42 @@ countries = ['all'] + sorted(list({c.title() for c in set(df['country']) if str(
 colors = {'seg1': 'orange',
 			'seg2': '#2C72EC'}
 
-def selector(col_names_and_values):
+def selector(req_dict):
 
-    """
-    return a data frame obtained from the original one (df) by filtering out all rows that don't match
-    the required values provided in the dictionary requirements which looks like, for example, 
-    {'age': '13-17', 'gender': 'f',...}
-    """
+	"""
+	return a data frame obtained from the original one (df) by filtering out all rows that don't match
+	the required values provided in the dictionary req_dict which looks like, for example, 
+	{'age': '13-17', 'gender': 'f',...}
 
-    actual_cols = set(df.columns) | {'tourist_type'}
-    required_cols = set(col_names_and_values)
+	what if after all the filtering all that's left is an empty data frame? then just return that empty data frame
+	"""
 
-    if not (required_cols <= actual_cols):
-        raise Exception('asking for wrong columns!')
+	if df.empty:
+		print('dataframe you\'re trying to select from is empty!')
+		return df
 
-    out = df
+	actual_cols = set(df.columns) | {'tourist_type'}
+	required_cols = set(req_dict)
 
-    for col in required_cols:
-    	if col_names_and_values[col] != 'all':
-    		if col != 'tourist_type':
-    			out = out[out[col] == col_names_and_values[col]]
-    		else:
-    			out = out[out[col_names_and_values[col]] == 'yes']
+	if not (required_cols <= actual_cols):
+		cols_na = ', '.join(required_cols - actual_cols)
+		raise Exception(f'column(s) {cols_na} you\'re asking for are not available!')
 
-    if not out.empty:
-        return out
-    else:
-        raise Exception('no data matching your requirements!')
+	out = df
+
+	for col in required_cols:
+
+		if req_dict[col] != 'all':
+
+			if col != 'tourist_type':
+				out = out[out[col].astype(str) == req_dict[col]]
+			else:
+				out = out[out[req_dict[col]] == 'yes']
+			if out.empty:
+				print('dataframe you\'re trying to select from became empty!')
+				break
+	
+	return out
 
 def make_number_reviews_scatter(df, name, color):
 
@@ -57,29 +68,30 @@ def make_number_reviews_scatter(df, name, color):
 	"""
 
 	if df.empty:
-		return go.Scatter()
+		return go.Scatter(x=[], y=[], name=name)
 
 	d1 = df[['date_of_experience', 'id']].groupby(['date_of_experience']).count().reset_index()
 
-	sc = go.Scatter(x=d1.date_of_experience, y=d1.id,
-                    mode='markers',
-                    marker=dict(size=12, line=dict(width=0), color=color, opacity=0.95),
-                    name=name, 
-                    # text='top characteristic words',
-                    )
+	sc = go.Scatter(x=d1.date_of_experience, 
+					y=d1.id,
+					mode='markers',
+					marker=dict(size=12, line=dict(width=0), color=color, opacity=0.95),
+					name=name
+					# text='top characteristic words',
+					)
 
 	return sc
 
 def make_dropdown(attr_name, seg_num, attr_options):
 
 	return dbc.DropdownMenu(
-                    id=f'ddm-{attr_name}-seg-{seg_num}',
-                    label=attr_name.title(),
-                    bs_size="sm",
-                    nav=True,
-                    in_navbar=True,
-                    children=[dbc.DropdownMenuItem(_, id=f'seg-{seg_num}-{attr_name}-' + _.replace(' ', '_'), disabled=False) for _ in attr_options],
-                    )
+					id=f'ddm-{attr_name}-seg-{seg_num}',
+					label=attr_name.title(),
+					bs_size="sm",
+					nav=True,
+					in_navbar=True,
+					children=[dbc.DropdownMenuItem(_, id=f'seg-{seg_num}-{attr_name}-' + _.replace(' ', '_'), disabled=False) for _ in attr_options],
+					)
 
 
 navbar = dbc.NavbarSimple(
@@ -100,46 +112,56 @@ body = dbc.Container([
 
 			dbc.CardDeck([
 
-        	dbc.Card(
-            [
-                dbc.CardHeader(dbc.Badge("Segment 1", color='info')),
-                dbc.CardBody(
-                    [
+			dbc.Card(
+			[
+				dbc.CardHeader(dbc.Row([dbc.Col(dbc.Badge("Segment 1", color='info')),
+													dbc.Col(dbc.Fade(dbc.Badge("unavailable", color='danger'),
+																		id='seg-1-alert', is_in=False, appear=False)),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col()
+													])
+															),
+				dbc.CardBody(
+					[
 						dbc.Nav(
-                    	[
-                    	make_dropdown('age', '1', age_groups), 
-                    	make_dropdown('gender', '1', genders),
-                 		make_dropdown('type', '1', tourist_types),
-                 		make_dropdown('country', '1', countries),
-                    	])
+						[
+						make_dropdown('age', '1', age_groups), 
+						make_dropdown('gender', '1', genders),
+						make_dropdown('type', '1', tourist_types),
+						make_dropdown('country', '1', countries),
+						])
 
-                    ]
-                ),
-            ]
-        ),
+					]
+				),
+			]
+		),
 		
 		dbc.Card(
-            [
-                dbc.CardHeader(dbc.Badge("Segment 2", color='info')),
-                dbc.CardBody(
-                    [
-                    dbc.Nav(
-                    	[
-                    	make_dropdown('age', '2', age_groups), 
-                    	make_dropdown('gender', '2', genders),
-                 		make_dropdown('type', '2', tourist_types),
-                 		make_dropdown('country', '2', countries),
-                    	])
-                    ]
-                ),
-            ]
-        ),
+			[
+				dbc.CardHeader(dbc.Badge("Segment 2", color='info')),
+				dbc.CardBody(
+					[
+					dbc.Nav(
+						[
+						make_dropdown('age', '2', age_groups), 
+						make_dropdown('gender', '2', genders),
+						make_dropdown('type', '2', tourist_types),
+						make_dropdown('country', '2', countries),
+						])
+					]
+				),
+			]
+		),
 
-        ]
+		]
 
-        ),
-    ],
-    className="main-container",
+		),
+	],
+	className="main-container",
 )
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -147,17 +169,18 @@ server = app.server
 
 app.layout = html.Div([navbar, body])
 
+CALLBACK_INPUTS = [dash.dependencies.Input('seg-1-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
+					[dash.dependencies.Input('seg-2-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
+						[dash.dependencies.Input('seg-1-gender-' + g, 'n_clicks_timestamp') for g in genders] + \
+							[dash.dependencies.Input('seg-2-gender-' + g, 'n_clicks_timestamp') for g in genders] + \
+								[dash.dependencies.Input('seg-1-type-' + tp.replace(' ','_'), 'n_clicks_timestamp') for tp in tourist_types] + \
+									[dash.dependencies.Input('seg-2-type-' + tp.replace(' ','_'), 'n_clicks_timestamp') for tp in tourist_types] + \
+										[dash.dependencies.Input('seg-1-country-' + c.replace(' ','_'), 'n_clicks_timestamp') for c in countries] + \
+											[dash.dependencies.Input('seg-2-country-' + c.replace(' ','_'), 'n_clicks_timestamp') for c in countries]
 @app.callback(
-    dash.dependencies.Output('brisb-reviews', 'figure'), # will be updating the figure part of the Graph
-    [dash.dependencies.Input('seg-1-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] +
-    	[dash.dependencies.Input('seg-2-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] +
-    		[dash.dependencies.Input('seg-1-gender-' + g, 'n_clicks_timestamp') for g in genders] +
-    			[dash.dependencies.Input('seg-2-gender-' + g, 'n_clicks_timestamp') for g in genders] +
-    				[dash.dependencies.Input('seg-1-type-' + tp.replace(' ','_'), 'n_clicks_timestamp') for tp in tourist_types] +
-    					[dash.dependencies.Input('seg-2-type-' + tp.replace(' ','_'), 'n_clicks_timestamp') for tp in tourist_types] +
-    						[dash.dependencies.Input('seg-1-country-' + c.replace(' ','_'), 'n_clicks_timestamp') for c in countries] +
-    							[dash.dependencies.Input('seg-2-country-' + c.replace(' ','_'), 'n_clicks_timestamp') for c in countries]
-    	)  # what inputs need to be monitored to update the output (figure in Graph)?
+	dash.dependencies.Output('brisb-reviews', 'figure'), # will be updating the figure part of the Graph
+	CALLBACK_INPUTS
+		)  # what inputs need to be monitored to update the output (figure in Graph)?
 
 def update_graph(*menu_items_click_timestamps):
 
@@ -223,14 +246,31 @@ def update_graph(*menu_items_click_timestamps):
 		max_country_seg2 = max([ts if ts else 0 for ts in tts_seg2_countries])
 		selected_country_seg2 = countries[tts_seg2_countries.index(max_country_seg2)]
 
+	fig_data = []
 
-	df_seg1 = selector({'age': selected_ag_seg1, 'gender': selected_gen_seg1, 'tourist_type': selected_types_seg1, 'country': selected_country_seg1})
-	df_seg2 = selector({'age': selected_ag_seg2, 'gender': selected_gen_seg2, 'tourist_type': selected_types_seg2, 'country': selected_country_seg2})
+	global no_seg1
 
-	fig_data = [make_number_reviews_scatter(df_seg1, name='segment 1: ' + '/'.join([selected_gen_seg1, selected_ag_seg1, selected_types_seg1, selected_country_seg1]), 
-						color=colors['seg1']), 
-				make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([selected_gen_seg2, selected_ag_seg2, selected_types_seg2, selected_country_seg2]), 
-						color=colors['seg2'])]
+	no_seg1 = False
+
+	df_seg1 = selector({'age': selected_ag_seg1, 
+						'gender': selected_gen_seg1, 
+						'tourist_type': selected_types_seg1, 
+						'country': selected_country_seg1})
+	if df_seg1.empty:
+		no_seg1 = True
+	else:
+		fig_data.append(make_number_reviews_scatter(df_seg1, name='segment 1: ' + '/'.join([selected_gen_seg1, selected_ag_seg1, selected_types_seg1, selected_country_seg1]), 
+						color=colors['seg1']))
+
+	df_seg2 = selector({'age': selected_ag_seg2, 
+						'gender': selected_gen_seg2, 
+						'tourist_type': selected_types_seg2, 
+						'country': selected_country_seg2})
+
+	
+
+	fig_data.append(make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([selected_gen_seg2, selected_ag_seg2, selected_types_seg2, selected_country_seg2]), 
+						color=colors['seg2']))
 
 	return {'data': fig_data,
 			'layout': go.Layout(
@@ -241,6 +281,20 @@ def update_graph(*menu_items_click_timestamps):
 							# height=500,
 							hovermode='closest')
 			}
+
+@app.callback(
+	dash.dependencies.Output('seg-1-alert', 'is_in'), # will be updating the figure part of the Graph
+	[dash.dependencies.Input('brisb-reviews', 'figure')]
+		)
+def no_segment(fig_state):
+
+	global no_seg1
+
+	if no_seg1 == True:
+
+		return True
+	else:
+		return False
 
 if __name__ == '__main__':
 
