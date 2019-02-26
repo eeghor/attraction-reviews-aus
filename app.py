@@ -142,7 +142,16 @@ body = dbc.Container([
 		
 		dbc.Card(
 			[
-				dbc.CardHeader(dbc.Badge("Segment 2", color='info')),
+				dbc.CardHeader(dbc.Row([dbc.Col(dbc.Badge("Segment 2", color='info')),
+													dbc.Col(dbc.Fade(dbc.Badge("unavailable", color='danger'),
+																		id='seg-2-alert', is_in=False, appear=False)),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col(),
+													dbc.Col()
+													])),
 				dbc.CardBody(
 					[
 					dbc.Nav(
@@ -167,7 +176,8 @@ body = dbc.Container([
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
-app.layout = html.Div([navbar, body])
+app.layout = html.Div(dbc.Tabs(
+            [dbc.Tab([navbar, body], label="Data"),]))
 
 CALLBACK_INPUTS = [dash.dependencies.Input('seg-1-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
 					[dash.dependencies.Input('seg-2-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
@@ -248,9 +258,16 @@ def update_graph(*menu_items_click_timestamps):
 
 	fig_data = []
 
+	leg_gen_label = lambda x: '[' + x + ']' if x != 'all' else '[any gender]'
+	leg_age_label = lambda x: '[' + x + ']' if x != 'all' else '[any age]'
+	leg_typ_label = lambda x: '[' + x + ']' if x != 'all' else '[any type]'
+	leg_cou_label = lambda x: '[' + x.lower() + ']' if x != 'all' else '[any country]'
+
 	global no_seg1
+	global no_seg2
 
 	no_seg1 = False
+	no_seg2 = False
 
 	df_seg1 = selector({'age': selected_ag_seg1, 
 						'gender': selected_gen_seg1, 
@@ -259,28 +276,34 @@ def update_graph(*menu_items_click_timestamps):
 	if df_seg1.empty:
 		no_seg1 = True
 	else:
-		fig_data.append(make_number_reviews_scatter(df_seg1, name='segment 1: ' + '/'.join([selected_gen_seg1, selected_ag_seg1, selected_types_seg1, selected_country_seg1]), 
+		fig_data.append(make_number_reviews_scatter(df_seg1, name='segment 1: ' + '/'.join([leg_gen_label(selected_gen_seg1), leg_age_label(selected_ag_seg1), leg_typ_label(selected_types_seg1), leg_cou_label(selected_country_seg1)]), 
 						color=colors['seg1']))
 
 	df_seg2 = selector({'age': selected_ag_seg2, 
 						'gender': selected_gen_seg2, 
 						'tourist_type': selected_types_seg2, 
 						'country': selected_country_seg2})
+	if df_seg2.empty:
+		no_seg2 = True
+	else:
+		fig_data.append(make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([leg_gen_label(selected_gen_seg2), leg_age_label(selected_ag_seg2), leg_typ_label(selected_types_seg2), leg_cou_label(selected_country_seg2)]), 
+						color=colors['seg2']))
 
 	
 
-	fig_data.append(make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([selected_gen_seg2, selected_ag_seg2, selected_types_seg2, selected_country_seg2]), 
-						color=colors['seg2']))
+	# fig_data.append(make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([selected_gen_seg2, selected_ag_seg2, selected_types_seg2, selected_country_seg2]), 
+	# 					color=colors['seg2']))
 
 	return {'data': fig_data,
 			'layout': go.Layout(
-							xaxis={'title': 'Date'},
-							yaxis={'title': 'Number of Reviews'},
-							margin={'l': 40, 'b': 80, 't': 10, 'r': 10},
-							legend={'x': 0, 'y': 1},
-							# height=500,
-							hovermode='closest')
-			}
+					xaxis={'title': 'Date'},
+					yaxis={'title': 'Number of Reviews'},
+					margin={'l': 40, 'b': 80, 't': 10, 'r': 10},
+					legend={'x': 0, 'y': 1},
+					showlegend=True,  # show legend even if only a single trace is present
+					# height=500,
+					hovermode='closest')
+				}
 
 @app.callback(
 	dash.dependencies.Output('seg-1-alert', 'is_in'), # will be updating the figure part of the Graph
@@ -291,6 +314,20 @@ def no_segment(fig_state):
 	global no_seg1
 
 	if no_seg1 == True:
+
+		return True
+	else:
+		return False
+
+@app.callback(
+	dash.dependencies.Output('seg-2-alert', 'is_in'), # will be updating the figure part of the Graph
+	[dash.dependencies.Input('brisb-reviews', 'figure')]
+		)
+def no_segment(fig_state):
+
+	global no_seg2
+
+	if no_seg2 == True:
 
 		return True
 	else:
