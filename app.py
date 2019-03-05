@@ -18,9 +18,40 @@ print(f'{len(df):,} reviews...')
 genders = ['all', 'm', 'f']
 age_groups = ['all'] + sorted([ag for ag in set(df['age']) if '-' in str(ag)], key=lambda x: int(x.split('-')[0]))
 tourist_types = ['all'] + [c for c in df.columns if {'yes', 'no'} <= set(df[c])]
-countries = ['all'] + sorted(list({c.title() for c in set(df['country']) if str(c).lower().strip() and 
-												(str(c).lower().strip() not in ['none', 'nan'])}), 
-													key=lambda x: x.split()[0])
+
+# countries with most arrivals according to ABS
+key_countries = {'australia': [], 
+				 'china': ['prc'], 
+				 'new zealand': ['nz'], 
+				 'united states': ['usa', 'united states of america', 'us'], 
+				 'united kingdom': ['uk', 'england'], 
+				 'japan': [],
+				 'singapore': ['sg'], 
+				 'malaysia': [], 
+				 'india': [], 
+				 'hong kong': ['hk']}
+
+def replace_country(c):
+
+	c = str(c)
+
+	for kc in key_countries:
+		if c.lower() == kc.lower() or (c.lower() in key_countries[kc]):
+			return kc.title()
+
+	if c.lower() not in ['none', 'nan']:
+		return 'other'.title()
+	else:
+		return c
+
+df['country'] = df['country'].apply(replace_country)
+
+_countries = {c for c in set(df['country']) if str(c).lower().strip() and 
+												(str(c).lower().strip() not in ['none', 'nan'])}
+
+
+countries = ['all'] + sorted(list(_countries), key=lambda x: x.split()[0])
+
 colors = {'seg1': 'orange',
 			'seg2': '#2C72EC'}
 
@@ -99,7 +130,7 @@ navbar = dbc.NavbarSimple(
 	brand_href="#",
 	sticky="top",)
 
-body = dbc.Container([
+body_data = dbc.Container([
 
 	dbc.Row([
 			dbc.Col(
@@ -177,7 +208,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 server = app.server
 
 app.layout = html.Div(dbc.Tabs(
-            [dbc.Tab([navbar, body], label="Data"),]))
+            [dbc.Tab([navbar, body_data], label="Data"),]))
 
 CALLBACK_INPUTS = [dash.dependencies.Input('seg-1-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
 					[dash.dependencies.Input('seg-2-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
