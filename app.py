@@ -1,369 +1,337 @@
 import os
 import dash
 import dash_core_components as dcc
-import dash_html_components as html
+from dash_html_components import Img, Col, Div, Br, Span
 
 import dash_bootstrap_components as dbc
-
+import numpy as np
 import pandas as pd
 
 import plotly.graph_objs as go
+from helpers import selector, normcdf
 
-# read the data first
-df = pd.read_csv('data/brisb.csv.gz', parse_dates=['date_of_experience'],
-											infer_datetime_format=True)
+from scipy.stats import hmean
+from itertools import chain
+from collections import Counter
 
-print(f'{len(df):,} reviews...')
+class TripAdvisorDashboard:
 
-genders = ['all', 'm', 'f']
-age_groups = ['all'] + sorted([ag for ag in set(df['age']) if '-' in str(ag)], key=lambda x: int(x.split('-')[0]))
-tourist_types = ['all'] + [c for c in df.columns if {'yes', 'no'} <= set(df[c])]
+	def __init__(self):
 
-# countries with most arrivals according to ABS
-key_countries = {'australia': [], 
-				 'china': ['prc'], 
-				 'new zealand': ['nz'], 
-				 'united states': ['usa', 'united states of america', 'us'], 
-				 'united kingdom': ['uk', 'england'], 
-				 'japan': [],
-				 'singapore': ['sg'], 
-				 'malaysia': [], 
-				 'india': [], 
-				 'hong kong': ['hk']}
+		self.data = pd.read_csv('data/data.csv', 
+							parse_dates=['date_of_experience'],
+							infer_datetime_format=True)
 
-def replace_country(c):
+	def _make_navbar(self, brand, sticky='top'):
 
-	c = str(c)
+		return dbc.NavbarSimple(brand=brand, sticky=sticky)
 
-	for kc in key_countries:
-		if c.lower() == kc.lower() or (c.lower() in key_countries[kc]):
-			return kc.title()
+	def _make_wc_card(self, pic, title):
 
-	if c.lower() not in ['none', 'nan']:
-		return 'other'.title()
-	else:
-		return c
-
-df['country'] = df['country'].apply(replace_country)
-
-_countries = {c for c in set(df['country']) if str(c).lower().strip() and 
-												(str(c).lower().strip() not in ['none', 'nan'])}
-
-
-countries = ['all'] + sorted(list(_countries), key=lambda x: x.split()[0])
-
-colors = {'seg1': 'orange',
-			'seg2': '#2C72EC'}
-
-def selector(req_dict):
-
-	"""
-	return a data frame obtained from the original one (df) by filtering out all rows that don't match
-	the required values provided in the dictionary req_dict which looks like, for example, 
-	{'age': '13-17', 'gender': 'f',...}
-
-	what if after all the filtering all that's left is an empty data frame? then just return that empty data frame
-	"""
-
-	if df.empty:
-		print('dataframe you\'re trying to select from is empty!')
-		return df
-
-	actual_cols = set(df.columns) | {'tourist_type'}
-	required_cols = set(req_dict)
-
-	if not (required_cols <= actual_cols):
-		cols_na = ', '.join(required_cols - actual_cols)
-		raise Exception(f'column(s) {cols_na} you\'re asking for are not available!')
-
-	out = df
-
-	for col in required_cols:
-
-		if req_dict[col] != 'all':
-
-			if col != 'tourist_type':
-				out = out[out[col].astype(str) == req_dict[col]]
-			else:
-				out = out[out[req_dict[col]] == 'yes']
-			if out.empty:
-				print('dataframe you\'re trying to select from became empty!')
-				break
-	
-	return out
-
-def make_number_reviews_scatter(df, name, color):
-
-	"""
-	return a scatter plot showing review counts
-	"""
-
-	if df.empty:
-		return go.Scatter(x=[], y=[], name=name)
-
-	d1 = df[['date_of_experience', 'id']].groupby(['date_of_experience']).count().reset_index()
-
-	sc = go.Scatter(x=d1.date_of_experience, 
-					y=d1.id,
-					mode='markers',
-					marker=dict(size=12, line=dict(width=0), color=color, opacity=0.95),
-					name=name
-					# text='top characteristic words',
-					)
-
-	return sc
-
-def make_dropdown(attr_name, seg_num, attr_options):
-
-	return dbc.DropdownMenu(
-					id=f'ddm-{attr_name}-seg-{seg_num}',
-					label=attr_name.title(),
-					bs_size="sm",
-					nav=True,
-					in_navbar=True,
-					children=[dbc.DropdownMenuItem(_, id=f'seg-{seg_num}-{attr_name}-' + _.replace(' ', '_'), disabled=False) for _ in attr_options],
-					)
-
-
-navbar = dbc.NavbarSimple(
-	brand="Demo TripAdvisor Dashboard",
-	brand_href="#",
-	sticky="top",)
-
-body_data = dbc.Container([
-
-	dbc.Row([
-			dbc.Col(
-				[	
-				html.Br(),
-				dcc.Graph(id='brisb-reviews',),
-				]
-				), 
-			]),
-
-			dbc.CardDeck([
-
-			dbc.Card(
-			[
-				dbc.CardHeader(dbc.Row([dbc.Col(dbc.Badge("Segment 1", color='info')),
-													dbc.Col(dbc.Fade(dbc.Badge("unavailable", color='danger'),
-																		id='seg-1-alert', is_in=False, appear=False)),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col()
-													])
-															),
-				dbc.CardBody(
-					[
-						dbc.Nav(
-						[
-						make_dropdown('age', '1', age_groups), 
-						make_dropdown('gender', '1', genders),
-						make_dropdown('type', '1', tourist_types),
-						make_dropdown('country', '1', countries),
+		return dbc.Card([
+					dbc.CardBody([dbc.CardImg(src=f'assets/{pic}')]),
+					dbc.CardFooter(Span(title))
 						])
 
-					]
-				),
-			]
-		),
+	def _make_seg_card(self, badge_text, menu_item_list):
+
+		return dbc.Card([
+					dbc.CardHeader([
+						dbc.Badge(badge_text, color='info')], style={'display': 'inline-grid'}
+									),
+					dbc.Collapse([
+						dbc.CardBody([
+							dbc.Nav([
+								dbc.DropdownMenu(label=it, bs_size="sm", nav=True) for it in menu_item_list
+									]),
+									])
+								]),
+					dbc.CardFooter([
+						dbc.Nav(dbc.NavItem(dbc.NavLink("females/foodie/australia/20-24", disabled=True, href="#")))
+									])
+						])
+
+	def create_body(self):
+
+		df = self.get_scfscores({'gender': 'm'}, {'gender': 'f'})
+
+		return dbc.Container([
+					dbc.Row([
+						dbc.Col([self._make_wc_card('wc_seg_1.png', 'Segment 1 word cloud'), 
+								 self._make_wc_card('wc_seg_2.png', 'Segment 2 word cloud')], md=4),
+						dbc.Col([dbc.Card([dbc.CardBody([dcc.Graph(figure=self.create_fsc(df))])])], md=8)
+							]),
+					dbc.Row([
+							self._make_seg_card('Segment 1', 'Age Gender Country Type'.split()),
+							self._make_seg_card('Segment 2', 'Age Gender Country Type'.split())
+						])
+							 ])
+
+	def create_layout(self):
+
+		return Div([self._make_navbar(brand='TripAdvisor Reviews for Melbourne'), 
+					self.create_body()])
+
+	def create_fsc(self, data, min_freq=4):
+
+		scale_marker = lambda fscore: 4 if abs(fscore) < 0.2 else 6 if 0.2 <= abs(fscore) <=0.4 else 8
+
+		df = data[(data['#seg1'] > min_freq) & (data['#seg2'] > min_freq)]
+
+		layout = go.Layout(
+					hovermode= 'closest',
+					autosize=False,
+					width=700,
+					height=540,
+					margin=go.layout.Margin(
+											l=0,
+											r=0,
+											b=30,
+											t=0,
+											pad=0),											
+					
+					xaxis= dict(
+        					title='Frequency in Reviews by Seg 1',
+        					ticklen= 5,
+        					tickmode='array',
+        					tickvals=np.linspace(df['fseg1n'].min(), df['fseg1n'].max(), num=5),
+        					ticktext=['low', '', '', '', 'high'],
+        					zeroline= False,
+        					gridwidth= 2,
+        					showticklabels=True,
+        					showgrid=True,),
+    				
+    				yaxis=dict(
+        					ticklen= 5,
+        					tickmode='array',
+        					tickvals=np.linspace(df['fseg2n'].min(), df['fseg2n'].max(), num=5),
+        					ticktext=['low', '', '', '', 'high'],
+        					gridwidth= 2,
+        					zeroline=False,
+        					showticklabels=True,
+        					showgrid=True,
+        					tickangle=-90,
+        					title='Frequency in Reviews by Seg 2',)
+        			)
+
+		trace = go.Scatter(
+    				x = df['fseg1n'],
+    				y = df['fseg2n'],
+    				mode = 'markers',
+    				hoverinfo='text', 
+    				marker=dict(
+                		cmin=-1,
+                		cmax=1,
+                		size=df['fscore'].apply(scale_marker), 
+                		opacity=0.85,
+                		color=df['fscore'],
+                		colorbar = dict(
+                        		title = 'Term Affinity',
+                        		titleside = 'right',
+                        		tickmode = 'array',
+                        		tickvals = np.linspace(-1,1, num=9),
+                        		ticktext = ['Seg 2','','','','','','', '', 'Seg 1'],
+                        		ticks = '',
+                        		tickangle=-90,
+                        		outlinewidth=0),
+                		colorscale='Portland',),
+    				text=df.index)
+
+		return go.Figure(data=[trace], layout=layout)
+
+
+	def get_scfscores(self, seg1_dict, seg2_dict):
+	 
 		
-		dbc.Card(
-			[
-				dbc.CardHeader(dbc.Row([dbc.Col(dbc.Badge("Segment 2", color='info')),
-													dbc.Col(dbc.Fade(dbc.Badge("unavailable", color='danger'),
-																		id='seg-2-alert', is_in=False, appear=False)),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col(),
-													dbc.Col()
-													])),
-				dbc.CardBody(
-					[
-					dbc.Nav(
-						[
-						make_dropdown('age', '2', age_groups), 
-						make_dropdown('gender', '2', genders),
-						make_dropdown('type', '2', tourist_types),
-						make_dropdown('country', '2', countries),
-						])
-					]
-				),
-			]
-		),
+		d = pd.DataFrame()
 
-		]
+		rev_seg1 = selector(self.data, seg1_dict)
+		rev_seg2 = selector(self.data, seg2_dict)
 
-		),
-	],
-	className="main-container",
-)
-
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server
-
-app.layout = html.Div(dbc.Tabs(
-            [dbc.Tab([navbar, body_data], label="Data"),]))
-
-CALLBACK_INPUTS = [dash.dependencies.Input('seg-1-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
-					[dash.dependencies.Input('seg-2-age-' + ag, 'n_clicks_timestamp') for ag in age_groups] + \
-						[dash.dependencies.Input('seg-1-gender-' + g, 'n_clicks_timestamp') for g in genders] + \
-							[dash.dependencies.Input('seg-2-gender-' + g, 'n_clicks_timestamp') for g in genders] + \
-								[dash.dependencies.Input('seg-1-type-' + tp.replace(' ','_'), 'n_clicks_timestamp') for tp in tourist_types] + \
-									[dash.dependencies.Input('seg-2-type-' + tp.replace(' ','_'), 'n_clicks_timestamp') for tp in tourist_types] + \
-										[dash.dependencies.Input('seg-1-country-' + c.replace(' ','_'), 'n_clicks_timestamp') for c in countries] + \
-											[dash.dependencies.Input('seg-2-country-' + c.replace(' ','_'), 'n_clicks_timestamp') for c in countries]
-@app.callback(
-	dash.dependencies.Output('brisb-reviews', 'figure'), # will be updating the figure part of the Graph
-	CALLBACK_INPUTS
-		)  # what inputs need to be monitored to update the output (figure in Graph)?
-
-def update_graph(*menu_items_click_timestamps):
-
-	t = list(menu_items_click_timestamps)
-
-	tts_seg1_age = [_ if _ else 0 for _ in t[:len(age_groups)]]
-	tts_seg2_age = [_ if _ else 0 for _ in t[len(age_groups):2*len(age_groups)]]
-
-	tts_seg1_gend = t[2*len(age_groups):2*len(age_groups)+len(genders)]
-	tts_seg2_gend = t[2*len(age_groups)+len(genders):2*len(age_groups)+2*len(genders)]
-
-	tts_seg1_types = t[2*len(age_groups)+2*len(genders):2*len(age_groups)+2*len(genders)+len(tourist_types)]
-	tts_seg2_types = t[2*len(age_groups)+2*len(genders)+len(tourist_types):2*len(age_groups)+2*len(genders)+2*len(tourist_types)]
-
-	tts_seg1_countries = t[2*len(age_groups)+2*len(genders)+2*len(tourist_types):2*len(age_groups)+2*len(genders)+2*len(tourist_types) + len(countries)]
-	tts_seg2_countries = t[2*len(age_groups)+2*len(genders)+2*len(tourist_types) + len(countries):2*len(age_groups)+2*len(genders)+2*len(tourist_types) + 2*len(countries)]
-
-	if not any(tts_seg1_age):
-		selected_ag_seg1 = age_groups[-1]
-	else:
-		max_ts_seg1 = max([ts if ts else 0 for ts in tts_seg1_age])
-		selected_ag_seg1 = age_groups[tts_seg1_age.index(max_ts_seg1)]
-
-	if not any(tts_seg2_age):
-		selected_ag_seg2 = 'all'
-	else:
-		max_ts_seg2 = max([ts if ts else 0 for ts in tts_seg2_age])
-		selected_ag_seg2 = age_groups[tts_seg2_age.index(max_ts_seg2)]
-
-	if not any(tts_seg1_gend):
-		selected_gen_seg1 = 'all'
-	else:
-		max_gen_seg1 = max([ts if ts else 0 for ts in tts_seg1_gend])
-		selected_gen_seg1 = genders[tts_seg1_gend.index(max_gen_seg1)]
-
-	if not any(tts_seg2_gend):
-		selected_gen_seg2 = 'all'
-	else:
-		max_gen_seg2 = max([ts if ts else 0 for ts in tts_seg2_gend])
-		selected_gen_seg2 = genders[tts_seg2_gend.index(max_gen_seg2)]
-
-	if not any(tts_seg1_types):
-		selected_types_seg1 = 'all'
-	else:
-		max_type_seg1 = max([ts if ts else 0 for ts in tts_seg1_types])
-		selected_types_seg1 = tourist_types[tts_seg1_types.index(max_type_seg1)]
-
-	if not any(tts_seg2_types):
-		selected_types_seg2 = 'all'
-	else:
-		max_type_seg2 = max([ts if ts else 0 for ts in tts_seg2_types])
-		selected_types_seg2 = tourist_types[tts_seg2_types.index(max_type_seg2)]
-
-	if not any(tts_seg1_countries):
-		selected_country_seg1 = 'all'
-	else:
-		max_country_seg1 = max([ts if ts else 0 for ts in tts_seg1_countries])
-		selected_country_seg1 = countries[tts_seg1_countries.index(max_country_seg1)]
-
-	if not any(tts_seg2_countries):
-		selected_country_seg2 = 'all'
-	else:
-		max_country_seg2 = max([ts if ts else 0 for ts in tts_seg2_countries])
-		selected_country_seg2 = countries[tts_seg2_countries.index(max_country_seg2)]
-
-	fig_data = []
-
-	leg_gen_label = lambda x: '[' + x + ']' if x != 'all' else '[any gender]'
-	leg_age_label = lambda x: '[' + x + ']' if x != 'all' else '[any age]'
-	leg_typ_label = lambda x: '[' + x + ']' if x != 'all' else '[any type]'
-	leg_cou_label = lambda x: '[' + x.lower() + ']' if x != 'all' else '[any country]'
-
-	global no_seg1
-	global no_seg2
-
-	no_seg1 = False
-	no_seg2 = False
-
-	df_seg1 = selector({'age': selected_ag_seg1, 
-						'gender': selected_gen_seg1, 
-						'tourist_type': selected_types_seg1, 
-						'country': selected_country_seg1})
-	if df_seg1.empty:
-		no_seg1 = True
-	else:
-		fig_data.append(make_number_reviews_scatter(df_seg1, name='segment 1: ' + '/'.join([leg_gen_label(selected_gen_seg1), leg_age_label(selected_ag_seg1), leg_typ_label(selected_types_seg1), leg_cou_label(selected_country_seg1)]), 
-						color=colors['seg1']))
-
-	df_seg2 = selector({'age': selected_ag_seg2, 
-						'gender': selected_gen_seg2, 
-						'tourist_type': selected_types_seg2, 
-						'country': selected_country_seg2})
-	if df_seg2.empty:
-		no_seg2 = True
-	else:
-		fig_data.append(make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([leg_gen_label(selected_gen_seg2), leg_age_label(selected_ag_seg2), leg_typ_label(selected_types_seg2), leg_cou_label(selected_country_seg2)]), 
-						color=colors['seg2']))
-
+		if rev_seg1.empty or rev_seg2.empty:
+			print('no scaled f-scores can be calculated due to empty segment dataframes!')
+			return d
 	
 
-	# fig_data.append(make_number_reviews_scatter(df_seg2, name='segment 2: ' + '/'.join([selected_gen_seg2, selected_ag_seg2, selected_types_seg2, selected_country_seg2]), 
-	# 					color=colors['seg2']))
+		d = pd.DataFrame.from_dict(Counter(chain.from_iterable(rev_seg1['lemmatised'].str.split())), orient='index').rename(columns={0: '#seg1'}) \
+				.join(pd.DataFrame.from_dict(Counter(chain.from_iterable(rev_seg2['lemmatised'].str.split())), orient='index').rename(columns={0: '#seg2'}),
+					 how='outer').fillna(0)
 
-	return {'data': fig_data,
-			'layout': go.Layout(
-					xaxis={'title': 'Date'},
-					yaxis={'title': 'Number of Reviews'},
-					margin={'l': 40, 'b': 80, 't': 10, 'r': 10},
-					legend={'x': 0, 'y': 1},
-					showlegend=True,  # show legend even if only a single trace is present
-					# height=500,
-					hovermode='closest')
-				}
+		d['pseg1'] = d['#seg1']/(d['#seg1'] + d['#seg2'])
+		d['pseg2'] = 1. - d['pseg1']
 
-@app.callback(
-	dash.dependencies.Output('seg-1-alert', 'is_in'), # will be updating the figure part of the Graph
-	[dash.dependencies.Input('brisb-reviews', 'figure')]
-		)
-def no_segment(fig_state):
+		d['fseg1'] = d['#seg1']/d['#seg1'].sum()
+		d['fseg2'] = d['#seg2']/d['#seg2'].sum()
 
-	global no_seg1
+		d['fscseg1'] = d.apply(lambda x: hmean([x['pseg1'], x['fseg1']]) if x['pseg1'] > 0 and x['fseg1'] > 0 else 0, axis=1)
+		d['fscseg2'] = d.apply(lambda x: hmean([x['pseg2'], x['fseg2']]) if x['pseg2'] > 0 and x['fseg2'] > 0 else 0, axis=1)
 
-	if no_seg1 == True:
+		# normalize pseg1
+		d['pseg1n'] = normcdf(d['pseg1'])
+		# and fseg1
+		d['fseg1n'] = normcdf(d['fseg1'])
 
-		return True
-	else:
-		return False
+		d['pseg2n'] = normcdf(d['pseg2'])
+		d['fseg2n'] = normcdf(d['fseg2'])
 
-@app.callback(
-	dash.dependencies.Output('seg-2-alert', 'is_in'), # will be updating the figure part of the Graph
-	[dash.dependencies.Input('brisb-reviews', 'figure')]
-		)
-def no_segment(fig_state):
+		d['fscseg1n'] = d.apply(lambda x: hmean([x['pseg1n'], x['fseg1n']]), axis=1)
+		d['fscseg2n'] = d.apply(lambda x: hmean([x['pseg2n'], x['fseg2n']]), axis=1)
 
-	global no_seg2
+		# corrected f-score
+		d['fscore'] = 0
 
-	if no_seg2 == True:
+		# where the seg1 score is larger make it f-score
+		d['fscore'] = d['fscore'].where(d['fscseg1n'] <= d['fscseg2n'], d['fscseg1n'])
 
-		return True
-	else:
-		return False
+		d['fscore'] = d['fscore'].where(d['fscseg1n'] >= d['fscseg2n'], 1. - d['fscseg2n'])
+
+		d['fscore'] = 2*(d['fscore'] - 0.5)
+			  
+		return d
+
 
 if __name__ == '__main__':
 
+	app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+	server = app.server
+
+	tad = TripAdvisorDashboard()
+
+	app.layout = tad.create_layout()
+
 	app.run_server(debug=True)
+
+
+
+
+
+
+
+# wc1_card = dbc.Card([
+# 				dbc.CardBody(
+# 							[dbc.CardImg(src='assets/wc_seg_Q.png')] 
+# 							),
+# 				dbc.CardFooter(Span('Words frequently used by Seg 1'))
+
+# 					])
+
+# wc2_card = dbc.Card([
+# 				dbc.CardBody(
+# 							[dbc.CardImg(src='assets/wc_seg_Q.png')] 
+# 							),
+# 				dbc.CardFooter(Span('Words frequently used by Seg 1'))
+
+# 					])
+
+# dummy_card = dbc.Card([
+# 				dbc.CardBody(
+# 							[Img(src='assets/dummy.png', style={'max-width': '100%'})]
+# 							)
+
+# 					])
+
+
+# body_data = dbc.Container(
+# 				[
+# 				dbc.Row([
+# 					dbc.Col([wc1_card, wc2_card], md=4),
+# 					dbc.Col([dummy_card], md=8)
+# 						]),
+# 				dbc.Row([
+# 					dbc.Col([drop_card], md=4),
+# 					dbc.Col([drop_card], md=4),
+# 					dbc.Col([drop_card], md=4)
+# 					])
+# 				])
+
+# # ,
+
+# # dbc.CardColumns([
+		
+# # 		dbc.Card(
+# # 			[
+# # 				dbc.CardHeader([
+					
+# # 					dbc.Badge("Segment 1", color='info'),
+# # 					# dbc.Fade([dbc.Badge("unavailable", color='danger')],
+# # 					# 					id='seg-1-alert', is_in=False, appear=False),
+# # 					], style={'display': 'inline-grid'}
+# # 					),
+# # 				dbc.Collapse([
+# # 					dbc.CardBody([
+# # 						dbc.Nav([
+# # 								dbc.DropdownMenu(label='Age', bs_size="sm", nav=True),
+# # 								dbc.DropdownMenu(label='Gender', bs_size="sm", nav=True),
+# # 								dbc.DropdownMenu(label='Type', bs_size="sm", nav=True),
+# # 								dbc.DropdownMenu(label='Country', bs_size="sm", nav=True)
+# # 								]),
+# # 								])
+# # 							]),
+# # 				dbc.CardFooter([
+# # 						dbc.Nav(dbc.NavItem(dbc.NavLink("females/foodie/australia/20-24", disabled=True, href="#")))
+# # 					])
+# # 			]),
+
+# # 		dbc.Card(
+# # 			[
+# # 				dbc.CardHeader([
+					
+# # 					dbc.Badge("Segment 2", color='info'),
+# # 					# dbc.Fade([dbc.Badge("unavailable", color='danger')],
+# # 					# 					id='seg-1-alert', is_in=False, appear=False),
+# # 					], style={'display': 'inline-grid'}
+# # 					),
+# # 				dbc.Collapse([
+# # 					dbc.CardBody([
+# # 						dbc.Nav([
+# # 								dbc.DropdownMenu(label='Age', bs_size="sm", nav=True),
+# # 								dbc.DropdownMenu(label='Gender', bs_size="sm", nav=True),
+# # 								dbc.DropdownMenu(label='Type', bs_size="sm", nav=True),
+# # 								dbc.DropdownMenu(label='Country', bs_size="sm", nav=True)
+# # 								]),
+# # 								])
+# # 							]),
+# # 				dbc.CardFooter([
+# # 						dbc.Nav(dbc.NavItem(dbc.NavLink("females/like a local/hong kong/any age", disabled=True, href="#")))
+# # 					])
+# # 			]),
+
+# # 		dbc.Card(
+# # 			[
+# # 				dbc.CardHeader([
+					
+# # 					dbc.Badge("Attraction Type", color='info'),
+# # 					# dbc.Fade([dbc.Badge("unavailable", color='danger')],
+# # 					# 					id='seg-1-alert', is_in=False, appear=False),
+# # 					], style={'display': 'inline-grid'}
+# # 					),
+# # 				dbc.Collapse([
+# # 					dbc.CardBody([
+# # 						dcc.Slider(
+# #         							id='year-slider',
+# #         							min=2013,
+# #         							max=2019,
+# #         							step=1,
+# #         							value=1,
+# #     								),
+# # 								])
+# # 							]),
+# # 				dbc.CardFooter([
+# # 						dbc.Nav(dbc.NavItem(dbc.NavLink("museums", disabled=True, href="#")))
+# # 					])
+# # 			], style={'width': '100%'})
+
+
+# # 		]
+
+# # 		),
+# # 	],
+# # 	className="main-container",
+# # )
+
+# app.layout = Div([navbar, body_data])
+
+
+# if __name__ == '__main__':
+
+# 	app.run_server(debug=True)
