@@ -37,7 +37,7 @@ class TripAdvisorDashboard:
 
 		return dbc.Card([
 					dbc.CardHeader([
-						dbc.Badge(badge_text, color='info')], style={'display': 'inline-grid'}
+						dbc.Badge(badge_text, color='info')], style={'display': 'inline'}
 									),
 					dbc.Collapse([
 						dbc.CardBody([
@@ -48,7 +48,7 @@ class TripAdvisorDashboard:
 								]),
 					dbc.CardFooter([
 						dbc.Nav(dbc.NavItem(dbc.NavLink("females/foodie/australia/20-24", disabled=True, href="#")))
-									])
+									], style={'background-color': 'white'})
 						])
 
 	def create_body(self):
@@ -57,15 +57,24 @@ class TripAdvisorDashboard:
 
 		return dbc.Container([
 					dbc.Row([
+						dbc.CardGroup([
 						dbc.Col([self._make_wc_card('wc_seg_1.png', 'Segment 1 word cloud'), 
-								 self._make_wc_card('wc_seg_2.png', 'Segment 2 word cloud')], md=4),
+								 self._make_wc_card('wc_seg_2.png', 'Segment 2 word cloud'),
+								 dbc.Card([dbc.CardBody([dbc.CardText('4,212 reviews by 3,932 users', 
+								 	style={'font-size': 20, 'background-color': '#FAF4A0'})])])
+								 ], md=4),
 						dbc.Col([dbc.Card([dbc.CardBody([dcc.Graph(figure=self.create_fsc(df))])])], md=8)
-							]),
-					dbc.Row([
-							self._make_seg_card('Segment 1', 'Age Gender Country Type'.split()),
-							self._make_seg_card('Segment 2', 'Age Gender Country Type'.split())
 						])
-							 ])
+							]),
+					Br(),
+					dbc.Row([
+						dbc.CardColumns([
+							self._make_seg_card('Segment 1', 'Age Gender Country Type'.split()),
+							self._make_seg_card('Segment 2', 'Age Gender Country Type'.split()),
+							self._make_seg_card('Attraction Type', 'Parks Museums Stadiums'.split())
+							])
+						])
+							 ], style={'display': 'grid'})
 
 	def create_layout(self):
 
