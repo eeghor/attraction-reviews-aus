@@ -3,6 +3,8 @@ import dash
 import dash_core_components as dcc
 from dash_html_components import Img, Col, Div, Br, Span
 
+from dash.dependencies import Input, Output, State
+
 import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
@@ -13,6 +15,9 @@ from helpers import selector, normcdf
 from scipy.stats import hmean
 from itertools import chain
 from collections import Counter
+
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
 class TripAdvisorDashboard:
 
@@ -37,9 +42,9 @@ class TripAdvisorDashboard:
 
 		return dbc.Card([
 					dbc.CardHeader([
-						dbc.Badge(badge_text, color='info')], style={'display': 'inline'}
+						dbc.Button(id=('badge_' + badge_text.lower().replace(' ','')), children=badge_text, color='info', size='sm')], style={'display': 'inline-block'}
 									),
-					dbc.Collapse([
+					dbc.Collapse(id=('collapse_' + badge_text.lower().replace(' ','')), children=[
 						dbc.CardBody([
 							dbc.Nav([
 								dbc.DropdownMenu(label=it, bs_size="sm", nav=True) for it in menu_item_list
@@ -53,15 +58,19 @@ class TripAdvisorDashboard:
 
 	def create_body(self):
 
-		df = self.get_scfscores({'gender': 'm'}, {'gender': 'f'})
+		us1, re1, us2, re2, df = self.get_scfscores({'gender': 'm', 'country': 'australia'}, {'age': '35-49'})
+		self.make_wordcloud(df)
 
 		return dbc.Container([
 					dbc.Row([
 						dbc.CardGroup([
 						dbc.Col([self._make_wc_card('wc_seg_1.png', 'Segment 1 word cloud'), 
 								 self._make_wc_card('wc_seg_2.png', 'Segment 2 word cloud'),
-								 dbc.Card([dbc.CardBody([dbc.CardText('4,212 reviews by 3,932 users', 
-								 	style={'font-size': 20, 'background-color': '#FAF4A0'})])])
+								 dbc.Card([dbc.CardBody([dbc.CardText(f'Users: {us1:,}(1)/{us2:,}(2)', 
+									style={'font-size': 18, 'background-color': '#FAF4A0'}),
+									dbc.CardText(f'Reviews: {re1:,}(1)/{re2:,}(2)', 
+										style={'font-size': 18, 'background-color': '#1BF022'})
+								 ])])
 								 ], md=4),
 						dbc.Col([dbc.Card([dbc.CardBody([dcc.Graph(figure=self.create_fsc(df))])])], md=8)
 						])
@@ -100,51 +109,51 @@ class TripAdvisorDashboard:
 											pad=0),											
 					
 					xaxis= dict(
-        					title='Frequency in Reviews by Seg 1',
-        					ticklen= 5,
-        					tickmode='array',
-        					tickvals=np.linspace(df['fseg1n'].min(), df['fseg1n'].max(), num=5),
-        					ticktext=['low', '', '', '', 'high'],
-        					zeroline= False,
-        					gridwidth= 2,
-        					showticklabels=True,
-        					showgrid=True,),
-    				
-    				yaxis=dict(
-        					ticklen= 5,
-        					tickmode='array',
-        					tickvals=np.linspace(df['fseg2n'].min(), df['fseg2n'].max(), num=5),
-        					ticktext=['low', '', '', '', 'high'],
-        					gridwidth= 2,
-        					zeroline=False,
-        					showticklabels=True,
-        					showgrid=True,
-        					tickangle=-90,
-        					title='Frequency in Reviews by Seg 2',)
-        			)
+							title='Frequency in Reviews by Seg 1',
+							ticklen= 5,
+							tickmode='array',
+							tickvals=np.linspace(df['fseg1n'].min(), df['fseg1n'].max(), num=5),
+							ticktext=['low', '', '', '', 'high'],
+							zeroline= False,
+							gridwidth= 2,
+							showticklabels=True,
+							showgrid=True,),
+					
+					yaxis=dict(
+							ticklen= 5,
+							tickmode='array',
+							tickvals=np.linspace(df['fseg2n'].min(), df['fseg2n'].max(), num=5),
+							ticktext=['low', '', '', '', 'high'],
+							gridwidth= 2,
+							zeroline=False,
+							showticklabels=True,
+							showgrid=True,
+							tickangle=-90,
+							title='Frequency in Reviews by Seg 2',)
+					)
 
 		trace = go.Scatter(
-    				x = df['fseg1n'],
-    				y = df['fseg2n'],
-    				mode = 'markers',
-    				hoverinfo='text', 
-    				marker=dict(
-                		cmin=-1,
-                		cmax=1,
-                		size=df['fscore'].apply(scale_marker), 
-                		opacity=0.85,
-                		color=df['fscore'],
-                		colorbar = dict(
-                        		title = 'Term Affinity',
-                        		titleside = 'right',
-                        		tickmode = 'array',
-                        		tickvals = np.linspace(-1,1, num=9),
-                        		ticktext = ['Seg 2','','','','','','', '', 'Seg 1'],
-                        		ticks = '',
-                        		tickangle=-90,
-                        		outlinewidth=0),
-                		colorscale='Portland',),
-    				text=df.index)
+					x = df['fseg1n'],
+					y = df['fseg2n'],
+					mode = 'markers',
+					hoverinfo='text', 
+					marker=dict(
+						cmin=-1,
+						cmax=1,
+						size=df['fscore'].apply(scale_marker), 
+						opacity=0.85,
+						color=df['fscore'],
+						colorbar = dict(
+								title = 'Term Affinity',
+								titleside = 'right',
+								tickmode = 'array',
+								tickvals = np.linspace(-1,1, num=9),
+								ticktext = ['Seg 2','','','','','','', '', 'Seg 1'],
+								ticks = '',
+								tickangle=-90,
+								outlinewidth=0),
+						colorscale='Portland',),
+					text=df.index)
 
 		return go.Figure(data=[trace], layout=layout)
 
@@ -196,7 +205,28 @@ class TripAdvisorDashboard:
 
 		d['fscore'] = 2*(d['fscore'] - 0.5)
 			  
-		return d
+		return (len(set(rev_seg1['by_user'])), len(set(rev_seg1['review_id'])), 
+					len(set(rev_seg2['by_user'])), len(set(rev_seg2['review_id'])), d)
+
+	def make_wordcloud(self, df):
+
+		wc1 = WordCloud(background_color='white', 
+						width=600, height=300, max_words=300).generate_from_frequencies(df[['#seg1']].to_dict()['#seg1'])
+
+		wc2 = WordCloud(background_color='white', 
+						   width=600, height=300, max_words=300).generate_from_frequencies(df[['#seg2']].to_dict()['#seg2'])
+
+		for i, wc in enumerate([wc1, wc2], 1):
+
+			plt.figure(figsize=(5,6))
+			fig = plt.imshow(wc, interpolation='bilinear')
+			fig.axes.get_xaxis().set_visible(False)
+			fig.axes.get_yaxis().set_visible(False)
+			plt.axis("off")
+			plt.savefig(f'assets/wc_seg_{i}.png', dpi=300, bbox_inches = 'tight', pad_inches = 0.0)
+
+		return self
+
 
 
 if __name__ == '__main__':
@@ -210,137 +240,17 @@ if __name__ == '__main__':
 
 	app.run_server(debug=True)
 
+	@app.callback(
+		Output("collapse_segment1", "is_open"),
+			[Input("badge_segment1", "n_clicks")],
+			[State("collapse_segment1", "is_open")],
+					)
 
+	def toggle_collapse(n, is_open):
 
+		if n:
+			return not is_open
+		return is_open
+	
+	
 
-
-
-
-# wc1_card = dbc.Card([
-# 				dbc.CardBody(
-# 							[dbc.CardImg(src='assets/wc_seg_Q.png')] 
-# 							),
-# 				dbc.CardFooter(Span('Words frequently used by Seg 1'))
-
-# 					])
-
-# wc2_card = dbc.Card([
-# 				dbc.CardBody(
-# 							[dbc.CardImg(src='assets/wc_seg_Q.png')] 
-# 							),
-# 				dbc.CardFooter(Span('Words frequently used by Seg 1'))
-
-# 					])
-
-# dummy_card = dbc.Card([
-# 				dbc.CardBody(
-# 							[Img(src='assets/dummy.png', style={'max-width': '100%'})]
-# 							)
-
-# 					])
-
-
-# body_data = dbc.Container(
-# 				[
-# 				dbc.Row([
-# 					dbc.Col([wc1_card, wc2_card], md=4),
-# 					dbc.Col([dummy_card], md=8)
-# 						]),
-# 				dbc.Row([
-# 					dbc.Col([drop_card], md=4),
-# 					dbc.Col([drop_card], md=4),
-# 					dbc.Col([drop_card], md=4)
-# 					])
-# 				])
-
-# # ,
-
-# # dbc.CardColumns([
-		
-# # 		dbc.Card(
-# # 			[
-# # 				dbc.CardHeader([
-					
-# # 					dbc.Badge("Segment 1", color='info'),
-# # 					# dbc.Fade([dbc.Badge("unavailable", color='danger')],
-# # 					# 					id='seg-1-alert', is_in=False, appear=False),
-# # 					], style={'display': 'inline-grid'}
-# # 					),
-# # 				dbc.Collapse([
-# # 					dbc.CardBody([
-# # 						dbc.Nav([
-# # 								dbc.DropdownMenu(label='Age', bs_size="sm", nav=True),
-# # 								dbc.DropdownMenu(label='Gender', bs_size="sm", nav=True),
-# # 								dbc.DropdownMenu(label='Type', bs_size="sm", nav=True),
-# # 								dbc.DropdownMenu(label='Country', bs_size="sm", nav=True)
-# # 								]),
-# # 								])
-# # 							]),
-# # 				dbc.CardFooter([
-# # 						dbc.Nav(dbc.NavItem(dbc.NavLink("females/foodie/australia/20-24", disabled=True, href="#")))
-# # 					])
-# # 			]),
-
-# # 		dbc.Card(
-# # 			[
-# # 				dbc.CardHeader([
-					
-# # 					dbc.Badge("Segment 2", color='info'),
-# # 					# dbc.Fade([dbc.Badge("unavailable", color='danger')],
-# # 					# 					id='seg-1-alert', is_in=False, appear=False),
-# # 					], style={'display': 'inline-grid'}
-# # 					),
-# # 				dbc.Collapse([
-# # 					dbc.CardBody([
-# # 						dbc.Nav([
-# # 								dbc.DropdownMenu(label='Age', bs_size="sm", nav=True),
-# # 								dbc.DropdownMenu(label='Gender', bs_size="sm", nav=True),
-# # 								dbc.DropdownMenu(label='Type', bs_size="sm", nav=True),
-# # 								dbc.DropdownMenu(label='Country', bs_size="sm", nav=True)
-# # 								]),
-# # 								])
-# # 							]),
-# # 				dbc.CardFooter([
-# # 						dbc.Nav(dbc.NavItem(dbc.NavLink("females/like a local/hong kong/any age", disabled=True, href="#")))
-# # 					])
-# # 			]),
-
-# # 		dbc.Card(
-# # 			[
-# # 				dbc.CardHeader([
-					
-# # 					dbc.Badge("Attraction Type", color='info'),
-# # 					# dbc.Fade([dbc.Badge("unavailable", color='danger')],
-# # 					# 					id='seg-1-alert', is_in=False, appear=False),
-# # 					], style={'display': 'inline-grid'}
-# # 					),
-# # 				dbc.Collapse([
-# # 					dbc.CardBody([
-# # 						dcc.Slider(
-# #         							id='year-slider',
-# #         							min=2013,
-# #         							max=2019,
-# #         							step=1,
-# #         							value=1,
-# #     								),
-# # 								])
-# # 							]),
-# # 				dbc.CardFooter([
-# # 						dbc.Nav(dbc.NavItem(dbc.NavLink("museums", disabled=True, href="#")))
-# # 					])
-# # 			], style={'width': '100%'})
-
-
-# # 		]
-
-# # 		),
-# # 	],
-# # 	className="main-container",
-# # )
-
-# app.layout = Div([navbar, body_data])
-
-
-# if __name__ == '__main__':
-
-# 	app.run_server(debug=True)
