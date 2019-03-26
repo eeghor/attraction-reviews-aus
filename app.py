@@ -15,9 +15,11 @@ from helpers import selector, normcdf
 from scipy.stats import hmean
 from itertools import chain
 from collections import Counter
+import json
 
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+
 
 class TripAdvisorDashboard:
 
@@ -26,6 +28,13 @@ class TripAdvisorDashboard:
 		self.data = pd.read_csv('data/data.csv', 
 							parse_dates=['date_of_experience'],
 							infer_datetime_format=True)
+
+		self.attrs = json.load(open('data/attributes.json'))
+
+		self.seg_options = {what: list(self.attrs[what].values()) for what in self.attrs}
+
+		self.app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+		self.server = self.app.server
 
 	def _make_navbar(self, brand, sticky='top'):
 
@@ -38,22 +47,34 @@ class TripAdvisorDashboard:
 					dbc.CardFooter(Span(title))
 						])
 
-	def _make_seg_card(self, badge_text, menu_item_list):
+	def make_id(self, pref, text):
+
+		print(pref + '_' + text.lower().replace(' ',''))
+
+		return pref + '_' + text.lower().replace(' ','')
+
+	def _make_seg_card(self, badge_text):
 
 		return dbc.Card([
 					dbc.CardHeader([
-						dbc.Button(id=('badge_' + badge_text.lower().replace(' ','')), children=badge_text, color='info', size='sm')], style={'display': 'inline-block'}
-									),
-					dbc.Collapse(id=('collapse_' + badge_text.lower().replace(' ','')), children=[
+						dbc.Row([
+						dbc.Button(id=self.make_id('badge', badge_text), 
+							children=badge_text, color='info', size='sm'),
+						dbc.Nav(dbc.NavItem(dbc.NavLink('segment description', disabled=True, href="#")))
+						]), 
+									]),
+					dbc.Collapse(id=self.make_id('collapse', badge_text), children=[
+						dbc.Card([
 						dbc.CardBody([
 							dbc.Nav([
-								dbc.DropdownMenu(label=it, bs_size="sm", nav=True) for it in menu_item_list
+								dbc.DropdownMenu(label=it, 
+									children=[dbc.DropdownMenuItem(children=c) 
+												for c in self.seg_options.get(it, None)], 
+									bs_size="sm", nav=True, style={'font-size': 14}) for it in self.seg_options 
+												
 									]),
 									])
-								]),
-					dbc.CardFooter([
-						dbc.Nav(dbc.NavItem(dbc.NavLink("females/foodie/australia/20-24", disabled=True, href="#")))
-									], style={'background-color': 'white'})
+								])]),
 						])
 
 	def create_body(self):
@@ -77,13 +98,10 @@ class TripAdvisorDashboard:
 							]),
 					Br(),
 					dbc.Row([
-						dbc.CardColumns([
-							self._make_seg_card('Segment 1', 'Age Gender Country Type'.split()),
-							self._make_seg_card('Segment 2', 'Age Gender Country Type'.split()),
-							self._make_seg_card('Attraction Type', 'Parks Museums Stadiums'.split())
+						dbc.Col([self._make_seg_card('Segment 1')]),
+						dbc.Col([self._make_seg_card('Segment 2')]),
 							])
 						])
-							 ], style={'display': 'grid'})
 
 	def create_layout(self):
 
@@ -231,26 +249,39 @@ class TripAdvisorDashboard:
 
 if __name__ == '__main__':
 
-	app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-	server = app.server
-
 	tad = TripAdvisorDashboard()
 
-	app.layout = tad.create_layout()
+	tad.app.layout = tad.create_layout()
 
-	app.run_server(debug=True)
-
-	@app.callback(
-		Output("collapse_segment1", "is_open"),
-			[Input("badge_segment1", "n_clicks")],
-			[State("collapse_segment1", "is_open")],
+	@tad.app.callback(
+		Output('collapse_segment1', "is_open"),
+			[Input('badge_segment1', "n_clicks")],
+				[State('collapse_segment1', "is_open")],
 					)
 
 	def toggle_collapse(n, is_open):
-
+		
+		print('calling callback..')
 		if n:
 			return not is_open
 		return is_open
+
+	@tad.app.callback(
+		Output('collapse_segment2', "is_open"),
+			[Input('badge_segment2', "n_clicks")],
+				[State('collapse_segment2', "is_open")],
+					)
+
+	def toggle_collapse2(n, is_open):
+		
+		print('calling callback 2..')
+		if n:
+			return not is_open
+		return is_open
+
+	tad.app.run_server(debug=True)
+
+	
 	
 	
 
