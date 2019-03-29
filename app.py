@@ -33,8 +33,31 @@ class TripAdvisorDashboard:
 
 		self.seg_options = {what: list(self.attrs[what].values()) for what in self.attrs}
 
+		print(self.seg_options)
+
 		self.app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 		self.server = self.app.server
+
+	def prefilter_seg_options(self):
+
+		for what in self.seg_options:
+
+			opts_upd = [self.seg_options[what][0]]
+
+			for opt in self.seg_options[what][1:]:
+
+				df_ = self.data[self.data[what].apply(lambda x: str(opt) in str(x))]
+
+				c = set(df_['review_id'])
+
+				if c and len(c) > 99:
+
+					opts_upd += [opt]
+
+			self.seg_options[what] = opts_upd
+
+		return self
+
 
 	def _make_navbar(self, brand, sticky='top'):
 
@@ -68,9 +91,11 @@ class TripAdvisorDashboard:
 						dbc.CardBody([
 							dbc.Nav([
 								dbc.DropdownMenu(label=it, 
-									children=[dbc.DropdownMenuItem(children=c) 
-												for c in self.seg_options.get(it, None)], 
-									bs_size="sm", nav=True, style={'font-size': 14}) for it in self.seg_options 
+												children=[dbc.DropdownMenuItem(id=self.make_id(self.make_id('mi', badge_text), c), children=c) 
+															for c in self.seg_options.get(it, None)], 
+												bs_size="sm", 
+												nav=True, 
+												style={'font-size': 14}) for it in self.seg_options 
 												
 									]),
 									])
@@ -249,7 +274,7 @@ class TripAdvisorDashboard:
 
 if __name__ == '__main__':
 
-	tad = TripAdvisorDashboard()
+	tad = TripAdvisorDashboard().prefilter_seg_options()
 
 	tad.app.layout = tad.create_layout()
 
