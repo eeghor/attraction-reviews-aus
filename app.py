@@ -33,8 +33,6 @@ class TripAdvisorDashboard:
 
 		self.seg_options = {what: list(self.attrs[what].values()) for what in self.attrs}
 
-		print(self.seg_options)
-
 		self.app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 		self.server = self.app.server
 
@@ -82,8 +80,10 @@ class TripAdvisorDashboard:
 					dbc.CardHeader([
 						dbc.Row([
 						dbc.Button(id=self.make_id('badge', badge_text), 
-							children=badge_text, color='info', size='sm'),
-						dbc.Nav(dbc.NavItem(dbc.NavLink('segment description', disabled=True, href="#")))
+							children=badge_text, color='info', size='sm', outline=True),
+						dbc.Nav(dbc.NavItem(dbc.NavLink(id=self.make_id('nl', badge_text), 
+														children='segment description', 
+														disabled=True, href="#")))
 						]), 
 									]),
 					dbc.Collapse(id=self.make_id('collapse', badge_text), children=[
@@ -99,7 +99,7 @@ class TripAdvisorDashboard:
 												
 									]),
 									])
-								])]),
+								]),]),
 						])
 
 	def create_body(self):
@@ -123,8 +123,15 @@ class TripAdvisorDashboard:
 							]),
 					Br(),
 					dbc.Row([
-						dbc.Col([self._make_seg_card('Segment 1')]),
-						dbc.Col([self._make_seg_card('Segment 2')]),
+						Div([
+							dbc.Row([
+									dbc.Col([self._make_seg_card('Segment 1')]),
+									dbc.Col([self._make_seg_card('Segment 2')]),
+									])
+							], style={'width': '92%'}),
+						Div([
+									dbc.Col([dbc.Button('OK', outline=True, color='success')])
+							], style={'width': '8%'})
 							])
 						])
 
@@ -284,9 +291,8 @@ if __name__ == '__main__':
 				[State('collapse_segment1', "is_open")],
 					)
 
-	def toggle_collapse(n, is_open):
+	def toggle_collapse1(n, is_open):
 		
-		print('calling callback..')
 		if n:
 			return not is_open
 		return is_open
@@ -299,10 +305,18 @@ if __name__ == '__main__':
 
 	def toggle_collapse2(n, is_open):
 		
-		print('calling callback 2..')
 		if n:
 			return not is_open
 		return is_open
+
+	@tad.app.callback(
+		Output('nl_segment1', 'children'),
+		[Input('mi_segment1_18-24', 'n_clicks_timestamp')]
+		)
+	def update_description(when_clicked):
+
+		if when_clicked:
+			return '18-24'
 
 	tad.app.run_server(debug=True)
 
