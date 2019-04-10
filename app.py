@@ -311,48 +311,32 @@ if __name__ == '__main__':
 
 	@tad.app.callback(
 		Output('nl_segment1', 'children'),
-		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') for _ in tad.seg_options['age']] + \
-		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') for _ in tad.seg_options['gender']] + \
-		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') for _ in tad.seg_options['type']] + \
-		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') for _ in tad.seg_options['country']] +\
-		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') for _ in tad.seg_options['attraction type']]
+		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') 
+				for what in tad.seg_options 
+				for _ in tad.seg_options[what]]
 		)
 	def update_description(*when_clicked_list):
 
-		spans = {'age': (0, len(tad.seg_options['age'])), 
-				 'gender': (len(tad.seg_options['age']), len(tad.seg_options['age']) + len(tad.seg_options['gender'])), 
-				 'type': (len(tad.seg_options['age']) + len(tad.seg_options['gender']), 
-				 			len(tad.seg_options['age']) + len(tad.seg_options['gender']) + len(tad.seg_options['type'])), 
-				 'country': (len(tad.seg_options['age']) + len(tad.seg_options['gender']) + len(tad.seg_options['type']), 
-				 				len(tad.seg_options['age']) + len(tad.seg_options['gender']) + len(tad.seg_options['type']) + len(tad.seg_options['country'])), 
-				 'attraction type': (len(tad.seg_options['age']) + \
-				 					len(tad.seg_options['gender']) + \
-				 					len(tad.seg_options['type']) + \
-				 					len(tad.seg_options['country']), 
-				 					len(tad.seg_options['age']) + \
-				 					len(tad.seg_options['gender']) + \
-				 					len(tad.seg_options['type']) + \
-				 					len(tad.seg_options['country']) + \
-				 					len(tad.seg_options['attraction type']))
+		lengths = {what: len(tad.seg_options[what]) for what in tad.seg_options}
+
+		spans = {'age': (0, lengths['age']), 
+				 'gender': (lengths['age'], lengths['age'] + lengths['gender']), 
+				 'type': (lengths['age'] + lengths['gender'], 
+				 		  lengths['age'] + lengths['gender']+ lengths['type']), 
+				 'country': (lengths['age'] + lengths['gender']+ lengths['type'], 
+				 				lengths['age'] + lengths['gender']+ lengths['type']+ lengths['country']), 
+				 'attraction type': (lengths['age'] + lengths['gender']+ lengths['type']+ lengths['country'], 
+				 					lengths['age'] + lengths['gender']+ lengths['type']+ lengths['country'] + 
+				 					lengths['attraction type'])
 				 }
 
-		when_clicked_age_list_ = [0 if not ts else ts for ts in when_clicked_list[spans['age'][0]: spans['age'][1]]]
-		when_clicked_gender_list_ = [0 if not ts else ts for ts in when_clicked_list[spans['gender'][0]: spans['gender'][1]]]
-		when_clicked_type_list_ = [0 if not ts else ts for ts in when_clicked_list[spans['type'][0]: spans['type'][1]]]
-		when_clicked_country_list_ = [0 if not ts else ts for ts in when_clicked_list[spans['country'][0]: spans['country'][1]]]
-		when_clicked_atype_list_ = [0 if not ts else ts for ts in when_clicked_list[spans['attraction type'][0]: spans['attraction type'][1]]]
+		pad_zeroes = lambda lst: [0 if not _ else _ for _ in lst]
 
-		max_idx_age = when_clicked_age_list_.index(max(when_clicked_age_list_))
-		max_idx_gender = when_clicked_gender_list_.index(max(when_clicked_gender_list_))
-		max_idx_type = when_clicked_type_list_.index(max(when_clicked_type_list_))
-		max_idx_country = when_clicked_country_list_.index(max(when_clicked_country_list_))
-		max_idx_atype = when_clicked_atype_list_.index(max(when_clicked_atype_list_))
+		when_clicked = {what: pad_zeroes(when_clicked_list[spans[what][0]: spans[what][1]]) for what in tad.seg_options}
 
-		return '/'.join([tad.seg_options['age'][max_idx_age], 
-						tad.seg_options['gender'][max_idx_gender], 
-						tad.seg_options['type'][max_idx_type], 
-						tad.seg_options['country'][max_idx_country], 
-						tad.seg_options['attraction type'][max_idx_atype]])
+		max_idx = {what: when_clicked[what].index(max(when_clicked[what])) for what in tad.seg_options}
+
+		return '/'.join([tad.seg_options[what][max_idx[what]] for what in tad.seg_options])
 
 	tad.app.run_server(debug=True)
 
