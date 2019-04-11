@@ -102,12 +102,15 @@ class TripAdvisorDashboard:
 								]),]),
 						])
 
-	def create_body(self):
+	def generate_layout(self):
 
+		navbar = self._make_navbar(brand='TripAdvisor Reviews for Melbourne')
+		
 		us1, re1, us2, re2, df = self.get_scfscores({'gender': 'm', 'country': 'australia'}, {'age': '35-49'})
+
 		self.make_wordcloud(df)
 
-		return dbc.Container([
+		body = dbc.Container([
 					dbc.Row([
 						dbc.CardGroup([
 						dbc.Col([self._make_wc_card('wc_seg_1.png', 'Segment 1 word cloud'), 
@@ -130,15 +133,15 @@ class TripAdvisorDashboard:
 									])
 							], style={'width': '92%'}),
 						Div([
-									dbc.Col([dbc.Button('OK', outline=True, color='success')])
+									dbc.Col([dbc.Button('OK', outline=True, color='success', id='update_everything')])
 							], style={'width': '8%'})
-							])
+							]),
+					# hidden Div to keep selector description as a string
+						Div(id='selector description', style={'display': 'none'})
 						])
 
-	def create_layout(self):
 
-		return Div([self._make_navbar(brand='TripAdvisor Reviews for Melbourne'), 
-					self.create_body()])
+		return Div([navbar, body])
 
 	def create_fsc(self, data, min_freq=4):
 
@@ -283,7 +286,7 @@ if __name__ == '__main__':
 
 	tad = TripAdvisorDashboard().prefilter_seg_options()
 
-	tad.app.layout = tad.create_layout()
+	tad.app.layout = tad.generate_layout()
 
 	@tad.app.callback(
 		Output('collapse_segment1', "is_open"),
@@ -298,9 +301,9 @@ if __name__ == '__main__':
 		return is_open
 
 	@tad.app.callback(
-		Output('collapse_segment2', "is_open"),
-			[Input('badge_segment2', "n_clicks")],
-				[State('collapse_segment2', "is_open")],
+		[Output('collapse_segment2', 'is_open')],
+			[Input('badge_segment2', 'n_clicks')],
+				[State('collapse_segment2', 'is_open')],
 					)
 
 	def toggle_collapse2(n, is_open):
@@ -310,7 +313,8 @@ if __name__ == '__main__':
 		return is_open
 
 	@tad.app.callback(
-		Output('nl_segment1', 'children'),
+		[Output('selector description', 'children'), 
+		Output('nl_segment1', 'children')],
 		[Input(tad.make_id(tad.make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') 
 				for what in tad.seg_options 
 				for _ in tad.seg_options[what]]
@@ -319,16 +323,34 @@ if __name__ == '__main__':
 
 		lengths = {what: len(tad.seg_options[what]) for what in tad.seg_options}
 
-		spans = {'age': (0, lengths['age']), 
-				 'gender': (lengths['age'], lengths['age'] + lengths['gender']), 
-				 'type': (lengths['age'] + lengths['gender'], 
-				 		  lengths['age'] + lengths['gender']+ lengths['type']), 
-				 'country': (lengths['age'] + lengths['gender']+ lengths['type'], 
-				 				lengths['age'] + lengths['gender']+ lengths['type']+ lengths['country']), 
-				 'attraction type': (lengths['age'] + lengths['gender']+ lengths['type']+ lengths['country'], 
-				 					lengths['age'] + lengths['gender']+ lengths['type']+ lengths['country'] + 
-				 					lengths['attraction type'])
-				 }
+		span_ends = np.cumsum([lengths[what] for what in tad.seg_options])
+
+		spans = {what: (span_ends[i-1] if i>0 else 0, span_ends[i]) for i, what in enumerate(tad.seg_options)}
+
+		pad_zeroes = lambda lst: [0 if not _ else _ for _ in lst]
+
+		when_clicked = {what: pad_zeroes(when_clicked_list[spans[what][0]: spans[what][1]]) for what in tad.seg_options}
+
+		max_idx = {what: when_clicked[what].index(max(when_clicked[what])) for what in tad.seg_options}
+		sel = json.dumps({what: tad.seg_options[what][max_idx[what]] for what in tad.seg_options})
+
+		wrd = '/'.join([tad.seg_options[what][max_idx[what]] for what in tad.seg_options])
+
+		return (sel, wrd)
+
+	@tad.app.callback(
+		Output('nl_segment2', 'children'),
+		[Input(tad.make_id(tad.make_id('mi', 'Segment 2'), _), 'n_clicks_timestamp') 
+				for what in tad.seg_options 
+				for _ in tad.seg_options[what]]
+		)
+	def update_description2(*when_clicked_list):
+
+		lengths = {what: len(tad.seg_options[what]) for what in tad.seg_options}
+
+		span_ends = np.cumsum([lengths[what] for what in tad.seg_options])
+
+		spans = {what: (span_ends[i-1] if i>0 else 0, span_ends[i]) for i, what in enumerate(tad.seg_options)}
 
 		pad_zeroes = lambda lst: [0 if not _ else _ for _ in lst]
 
