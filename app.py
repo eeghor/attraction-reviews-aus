@@ -61,13 +61,6 @@ class TripAdvisorDashboard:
 
 		return dbc.NavbarSimple(brand=brand, sticky=sticky)
 
-	def _make_wc_card(self, pic, title):
-
-		return dbc.Card([
-					dbc.CardBody([dbc.CardImg(src=f'assets/{pic}')]),
-					dbc.CardFooter(Span(title))
-						])
-
 	def make_id(self, pref, text):
 
 		print(pref + '_' + text.lower().replace(' ',''))
@@ -113,15 +106,24 @@ class TripAdvisorDashboard:
 		body = dbc.Container([
 					dbc.Row([
 						dbc.CardGroup([
-						dbc.Col([self._make_wc_card('wc_seg_1.png', 'Segment 1 word cloud'), 
-								 self._make_wc_card('wc_seg_2.png', 'Segment 2 word cloud'),
-								 dbc.Card([dbc.CardBody([dbc.CardText(f'Users: {us1:,}(1)/{us2:,}(2)', 
-									style={'font-size': 18, 'background-color': '#FAF4A0'}),
-									dbc.CardText(f'Reviews: {re1:,}(1)/{re2:,}(2)', 
-										style={'font-size': 18, 'background-color': '#1BF022'})
-								 ])])
+						dbc.Col([dbc.Card([
+											dbc.CardBody([dbc.CardImg(src=f'assets/wc_seg_1.png')]),
+											dbc.CardFooter(Span('Segment 1 word cloud'))
+											]), 
+								 dbc.Card([
+											dbc.CardBody([dbc.CardImg(src=f'assets/wc_seg_2.png')]),
+											dbc.CardFooter(Span(id='span_s2', children='Segment 2 word cloud'))
+											]),
+								 dbc.Card([
+								 			dbc.CardBody([dbc.CardText(f'Users: {us1:,}(1)/{us2:,}(2)', 
+											style={'font-size': 18, 'background-color': '#FAF4A0'}),
+											dbc.CardText(f'Reviews: {re1:,}(1)/{re2:,}(2)', 
+											style={'font-size': 18, 'background-color': '#1BF022'})
+								 			])])
 								 ], md=4),
-						dbc.Col([dbc.Card([dbc.CardBody([dcc.Graph(figure=self.create_fsc(df))])])], md=8)
+						dbc.Col([dbc.Card([
+											dbc.CardBody([dcc.Graph(figure=self.create_fsc(df))])
+											])], md=8)
 						])
 							]),
 					Br(),
@@ -210,14 +212,20 @@ class TripAdvisorDashboard:
 
 		return go.Figure(data=[trace], layout=layout)
 
+	def filter_df(self, seg1_dict, seg2_dict):
+
+		rev_seg1 = selector(self.data, seg1_dict)
+		rev_seg2 = selector(self.data, seg2_dict)
+
+		return (rev_seg1, rev_seg2)
+
 
 	def get_scfscores(self, seg1_dict, seg2_dict):
 	 
 		
 		d = pd.DataFrame()
 
-		rev_seg1 = selector(self.data, seg1_dict)
-		rev_seg2 = selector(self.data, seg2_dict)
+		rev_seg1, rev_seg2 = self.filter_df(seg1_dict, seg2_dict)
 
 		if rev_seg1.empty or rev_seg2.empty:
 			print('no scaled f-scores can be calculated due to empty segment dataframes!')
@@ -359,6 +367,20 @@ if __name__ == '__main__':
 		max_idx = {what: when_clicked[what].index(max(when_clicked[what])) for what in tad.seg_options}
 
 		return '/'.join([tad.seg_options[what][max_idx[what]] for what in tad.seg_options])
+
+	# when clicked the OK button, update everything
+	@tad.app.callback(
+		Output('span_s2', 'children'),
+		[Input('update_everything', 'n_clicks')],
+		[State('selector description', 'children')]
+		)
+	def update(n, dict_str):
+		# first, get the dictionaries for filtering from the hidden 'selector description'
+		d1 = json.loads(dict_str)
+		print(d1)
+		return d1
+
+
 
 	tad.app.run_server(debug=True)
 
