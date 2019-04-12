@@ -15,17 +15,17 @@ def selector(df, req_dict):
     actual_cols = set(df.columns)
     required_cols = set(req_dict)
 
+    out = df
+    
     if not (required_cols <= actual_cols):
 
         cols_na = ', '.join(required_cols - actual_cols)
 
         raise Exception(f'column(s) {cols_na} you\'re asking for are not available!')
 
-    out = df
-
     for col in required_cols:
         
-        out = out[out[col].astype(str).apply(lambda x: req_dict[col] in x)]
+        out = out[out[col].astype(str).apply(lambda x: (req_dict[col] in x) if ('all' not in req_dict[col]) else True)]
           
         if out.empty:
             break
