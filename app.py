@@ -20,6 +20,9 @@ import json
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
+import io
+import base64
+
 
 make_id = lambda pref, text: pref + '_' + text.lower().replace(' ','')
 scale_marker = lambda fscore: 4 if abs(fscore) < 0.2 else 6 if 0.2 <= abs(fscore) <=0.4 else 8
@@ -87,7 +90,7 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 	d = d[(d['#seg1'] > min_freq) & (d['#seg2'] > min_freq)]
 
 	"""
-	         #seg1  #seg2
+			 #seg1  #seg2
 	go         862    862
 	time      1292   1292
 	week        90     90
@@ -200,14 +203,37 @@ def make_wordcloud(df):
 	wc2 = WordCloud(background_color='white', 
 					   width=600, height=300, max_words=300).generate_from_frequencies(df[['#seg2']].to_dict()['#seg2'])
 
+	pngs = []
+
+	# wc1.to_image()
+
 	for i, wc in enumerate([wc1, wc2], 1):
 
-		plt.figure(figsize=(5,6))
-		fig = plt.imshow(wc, interpolation='bilinear')
-		fig.axes.get_xaxis().set_visible(False)
-		fig.axes.get_yaxis().set_visible(False)
-		plt.axis("off")
-		plt.savefig(f'assets/wc_seg_{i}.png', dpi=300, bbox_inches = 'tight', pad_inches = 0.0)
+		# plt.figure(figsize=(5,6))
+		# fig = plt.imshow(wc, interpolation='bilinear')
+		# fig.axes.get_xaxis().set_visible(False)
+		# fig.axes.get_yaxis().set_visible(False)
+		# plt.axis("off")
+
+		# figfile = io.BytesIO()
+		# plt.savefig(figfile, format='png')
+		# figfile.seek(0) 
+		# # getvalue() Return bytes containing the entire contents of the buffer
+		# # figdata_png = base64.b64encode(figfile.getvalue()).decode()
+
+		# pngs.append(figfile)
+
+		# plt.savefig(f'assets/wc_seg_{i}.png', dpi=300, bbox_inches = 'tight', pad_inches = 0.0)
+
+		pil_img = wc.to_image()
+		img = io.BytesIO()
+		pil_img.save(img, "PNG")
+		img.seek(0)
+		img_b64 = base64.b64encode(img.getvalue()).decode()
+
+		pngs.append(img_b64)
+	
+	return pngs
 
 if __name__ == '__main__':
 
@@ -393,15 +419,15 @@ if __name__ == '__main__':
 			
 			if d.empty:
 				raise Exception('empty data frames!')
-				
+
 			print('making word clouds')
-			make_wordcloud(d)
+			wc1, wc2 = make_wordcloud(d)
 			print('done')
 
-			return ['/'.join([str(v) for v in ds1.values()]),
-					'/'.join([str(v) for v in ds2.values()]),
-					'assets/wc_seg_1.png',
-					'assets/wc_seg_2.png'
+			return ['/'.join([str(v) for v in seg1_dict.values()]),
+					'/'.join([str(v) for v in seg2_dict.values()]),
+					f'data:image/png;base64,{wc1}',
+					f'data:image/png;base64,{wc2}'
 					]
 		else:
 			return ['nothing', 'nothing', None, None]
