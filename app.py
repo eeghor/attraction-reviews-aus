@@ -388,14 +388,17 @@ if __name__ == '__main__':
 		[Output('span_s1', 'children'), 
 			Output('span_s2', 'children'),
 			Output('wc1', 'src'), 
-			Output('wc2', 'src')],
+			Output('cardtext_s1', 'children'),
+			Output('wc2', 'src'),
+			Output('cardtext_s2', 'children'),
+			Output('main_graph', 'figure')],
 		[Input('update_everything', 'n_clicks')],
 		[State('selector description', 'children')]
 		)
 	def update(n, dict_str):
 
 		if (not n) or (not dict_str):
-			return ['nothing', 'nothing', None, None]
+			return ['nothing', 'nothing', None, '', None, '', go.Figure()]
 		
 		ctx = dash.callback_context
 
@@ -424,13 +427,20 @@ if __name__ == '__main__':
 			wc1, wc2 = make_wordcloud(d)
 			print('done')
 
-			return ['/'.join([str(v) for v in seg1_dict.values()]),
-					'/'.join([str(v) for v in seg2_dict.values()]),
+			new_main_figure = generate_main_graph(d)
+
+			print('generated main graph')
+
+			return ['Seg1: ' + '/'.join([str(v) for v in seg1_dict.values()]),
+					'Seg2: ' + '/'.join([str(v) for v in seg2_dict.values()]),
 					f'data:image/png;base64,{wc1}',
-					f'data:image/png;base64,{wc2}'
+					f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2',
+					f'data:image/png;base64,{wc2}',
+					f'Reviews: {reviews_in_seg1:,}/{reviews_in_seg2:,} in Seg1/Seg2',
+					new_main_figure
 					]
 		else:
-			return ['nothing', 'nothing', None, None]
+			return ['nothing', 'nothing', None, '', None, '', go.Figure()]
 
 
 	app.run_server(debug=True)
