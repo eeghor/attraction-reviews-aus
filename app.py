@@ -28,35 +28,41 @@ make_id = lambda pref, text: pref + '_' + text.lower().replace(' ','')
 scale_marker = lambda fscore: 4 if abs(fscore) < 0.2 else 6 if 0.2 <= abs(fscore) <=0.4 else 8
 filter_df = lambda df, seg1_dict, seg2_dict: (selector(df, seg1_dict), selector(df, seg2_dict))
 
+default_segs = {1: {'age': 'all ages', 'gender': 'm'},
+				2: {'age': 'all ages', 'gender': 'f'}}
+
 def _make_seg_card(txt):
 	
 	return dbc.Card([
 					dbc.CardHeader([
 						dbc.Row([
 						dbc.Button(id=make_id('badge', txt), 
-							children=txt, color='info', size='sm', outline=True),
-						dbc.Nav(dbc.NavItem(dbc.NavLink(id=make_id('nl', txt), 
-														children='segment description', 
-														disabled=True, href="#")))
+							children=txt, color='info', size='sm', outline=True)
+						# dbc.Nav(dbc.NavItem(dbc.NavLink(id=make_id('nl', txt), 
+						# 								children='segment description', 
+						# 								disabled=True, href="#")))
 						]), 
 									]),
+
 					dbc.Collapse(id=make_id('collapse', txt), 
-						children=[
-							dbc.Card([
-								dbc.CardBody([
-									dbc.Nav([
-										dbc.DropdownMenu(label=it, 
-												children=[dbc.DropdownMenuItem(id=make_id(make_id('mi', txt), c), 
-															children=c) 
+								 is_open=False,
+								 children=[
+									dbc.Card([
+										dbc.CardBody([
+											dbc.Nav([
+												dbc.DropdownMenu(label=it, 
+														children=[dbc.DropdownMenuItem(
+																			id=make_id(make_id('mi', txt), c), 
+																			children=c) 
 															for c in seg_options.get(it, None)], 
-												bs_size="sm", 
-												nav=True, 
-												style={'font-size': 14}) for it in seg_options 
+														bs_size="sm", 
+														nav=True, 
+														style={'font-size': 14}) for it in seg_options 
 												
+													]),
+													])
 											]),
-											])
-									]),
-							]),
+											]),
 					])
 
 def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
@@ -73,9 +79,7 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 
 	# collect some stats
 	users_in_seg1, reviews_in_seg1 = len(set(rev_seg1['by_user'])), len(set(rev_seg1['review_id']))
-	print(f'segment1: users: {users_in_seg1}, reviews: {reviews_in_seg1}')
 	users_in_seg2, reviews_in_seg2 = len(set(rev_seg2['by_user'])), len(set(rev_seg2['review_id']))	
-	print(f'segment2: users: {users_in_seg2}, reviews: {reviews_in_seg2}')
 
 	if rev_seg1.empty or rev_seg2.empty:
 		print('no scaled f-scores can be calculated due to empty segment data frames!')
@@ -205,25 +209,7 @@ def make_wordcloud(df):
 
 	pngs = []
 
-	# wc1.to_image()
-
 	for i, wc in enumerate([wc1, wc2], 1):
-
-		# plt.figure(figsize=(5,6))
-		# fig = plt.imshow(wc, interpolation='bilinear')
-		# fig.axes.get_xaxis().set_visible(False)
-		# fig.axes.get_yaxis().set_visible(False)
-		# plt.axis("off")
-
-		# figfile = io.BytesIO()
-		# plt.savefig(figfile, format='png')
-		# figfile.seek(0) 
-		# # getvalue() Return bytes containing the entire contents of the buffer
-		# # figdata_png = base64.b64encode(figfile.getvalue()).decode()
-
-		# pngs.append(figfile)
-
-		# plt.savefig(f'assets/wc_seg_{i}.png', dpi=300, bbox_inches = 'tight', pad_inches = 0.0)
 
 		pil_img = wc.to_image()
 		img = io.BytesIO()
@@ -258,39 +244,37 @@ if __name__ == '__main__':
 				opts_upd += [opt]
 				seg_options[what] = opts_upd
 
-	seg1_dict = {'age': '35-49'}
-	seg2_dict = {'gender': 'f'}
+	print('working with default sigments..')
 
-	users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, seg1_dict, seg2_dict)
-	
-	if d.empty:
-		raise Exception('empty data frames!')
+	users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, default_segs[1], default_segs[2])
 
-	fig = generate_main_graph(d)
+	print('making word clouds...')
+	wc1, wc2 = make_wordcloud(d)
+	print('done')
 
-	navbar = dbc.NavbarSimple(brand='TripAdvisor Reviews for Melbourne', sticky='top')
+	navbar = dbc.NavbarSimple(brand='TripAdvisor Reviews for Melbourne', sticky='top', style={'font-size': 22})
 
 	body = dbc.Container([
 					dbc.Row([
 						dbc.CardGroup([
 						dbc.Col([dbc.Card([
-											dbc.CardBody([dbc.CardImg(id='wc1', src=None)]),
-											dbc.CardFooter(Span(id='span_s1', children='Segment 1 word cloud'))
+											dbc.CardBody([dbc.CardImg(id='wc1', src=f'data:image/png;base64,{wc1}')]),
+											dbc.CardFooter(Span(id='wc1_text', children='Segment 1 word cloud'))
 											]), 
 								 dbc.Card([
-											dbc.CardBody([dbc.CardImg(id='wc2', src=None)]),
-											dbc.CardFooter(Span(id='span_s2', children='Segment 2 word cloud'))
+											dbc.CardBody([dbc.CardImg(id='wc2', src=f'data:image/png;base64,{wc2}')]),
+											dbc.CardFooter(Span(id='wc2_text', children='Segment 2 word cloud'))
 											]),
 								 dbc.Card([
-											dbc.CardBody([dbc.CardText(id='cardtext_s1', children='', 
+											dbc.CardBody([dbc.CardText(id='seg_info_text_line1', children='', 
 											style={'font-size': 18, 'background-color': '#FAF4A0'}),
-											dbc.CardText(id='cardtext_s2', children='', 
+											dbc.CardText(id='seg_info_text_line2', children='', 
 											style={'font-size': 18, 'background-color': '#1BF022'})
 											])])
 								 ], md=4),
 
 						dbc.Col([dbc.Card([
-											dbc.CardBody([dcc.Graph(id='main_graph', figure=fig)])
+											dbc.CardBody([dcc.Graph(id='main_graph', figure=generate_main_graph(d))])
 											])], md=8)
 						])
 							]),
@@ -303,51 +287,55 @@ if __name__ == '__main__':
 									])
 							], style={'width': '92%'}),
 						Div([
-									dbc.Col([dbc.Button('OK', outline=True, color='success', id='update_everything')])
+									dbc.Col([dbc.Button('OK', 
+										outline=True, 
+										color='success', 
+										id='update_everything')])
 							], style={'width': '8%'})
 							]),
 					# hidden Div to keep selector description as a string
-						Div(id='selector description', style={'display': 'none'})
+						Div(id='selector description', 
+							style={'display': 'none'})
 						])
 
 	app.layout = Div([navbar, body])
 		
 	# collapse callback
 	@app.callback(
-		[Output('collapse_segment1', 'is_open'), 
-			Output('collapse_segment2', 'is_open')],
-				[Input('badge_segment1', 'n_clicks'), 
-					Input('badge_segment2', 'n_clicks')],
-					[State('collapse_segment1', 'is_open'), 
-						State('collapse_segment2', 'is_open')],
-					)
-	def toggle_collapse(*arg_lst):
+		[Output('collapse_segment1', 'is_open'), Output('collapse_segment2', 'is_open')],
+		[Input('badge_segment1', 'n_clicks'), Input('badge_segment2', 'n_clicks')],
+		[State('collapse_segment1', 'is_open'), State('collapse_segment2', 'is_open')])
+
+	def toggle_collapse(nclicks_seg1, nclicks_seg2, is_open_seg1, is_open_seg2):
 
 		"""
 		n_clicks is how many times clicked so far; callback triggers whenever n_clicks changes
 		"""
 
-		n_seg1, n_seg2, is_open_seg1, is_open_seg2 = arg_lst
-
-		ctx = dash.callback_context
-		
-		changed = ctx.triggered[0]['prop_id']
-
 		upd_open_states = [is_open_seg1, is_open_seg2]
 
-		if changed and (changed == 'badge_segment1.n_clicks'):  
-			upd_open_states[0] = (not is_open_seg1)
+		changed = dash.callback_context.triggered
+
+		if not changed:
+			print('returning current states, nothing changed!')
 			return upd_open_states
 
-		if changed and (changed == 'badge_segment2.n_clicks'):  
-			upd_open_states[1] = (not is_open_seg2)
-			return upd_open_states
+		what_changed = changed[0].get('prop_id', None)
+		new_value = changed[0].get('value', None)
+
+		if what_changed:
+
+			if (what_changed == 'badge_segment1.n_clicks') and new_value:
+				upd_open_states[0] = (not is_open_seg1)
+			elif (what_changed == 'badge_segment2.n_clicks') and new_value:
+				upd_open_states[1] = (not is_open_seg2)
 
 		return upd_open_states
 
-	@app.callback([Output('selector description', 'children'), 
-					Output('nl_segment1', 'children'),
-					Output('nl_segment2', 'children')],
+	@app.callback([Output('selector description', 'children'),
+					Output('wc1_text', 'children'),
+					Output('wc2_text', 'children')
+					],
 					[Input(make_id(make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') 
 							for what in seg_options 
 							for _ in seg_options[what]] + \
@@ -355,6 +343,7 @@ if __name__ == '__main__':
 							for what in seg_options 
 							for _ in seg_options[what]]
 		)
+
 	def specify_segments(*lst):
 
 		lengths = {what: len(seg_options[what]) for what in seg_options}
@@ -378,27 +367,27 @@ if __name__ == '__main__':
 
 		sel = json.dumps({**dict_seg1, **dict_seg2})
 
-		wrd1 = '/'.join([seg_options[what][max_idx1[what]] for what in seg_options])
-		wrd2 = '/'.join([seg_options[what][max_idx2[what]] for what in seg_options])
+		wrd1 = 'Seg 1:' + '/'.join([seg_options[what][max_idx1[what]] for what in seg_options])
+		wrd2 = 'Seg 2:' +'/'.join([seg_options[what][max_idx2[what]] for what in seg_options])
 
 		return (sel, wrd1, wrd2)
 
 	# when clicked the OK button, update everything
 	@app.callback(
-		[Output('span_s1', 'children'), 
-			Output('span_s2', 'children'),
+		[
 			Output('wc1', 'src'), 
-			Output('cardtext_s1', 'children'),
+			Output('seg_info_text_line1', 'children'),
 			Output('wc2', 'src'),
-			Output('cardtext_s2', 'children'),
+			Output('seg_info_text_line2', 'children'),
 			Output('main_graph', 'figure')],
 		[Input('update_everything', 'n_clicks')],
 		[State('selector description', 'children')]
 		)
+
 	def update(n, dict_str):
 
 		if (not n) or (not dict_str):
-			return ['nothing', 'nothing', None, '', None, '', go.Figure()]
+			return [None, '', None, '', go.Figure()]
 		
 		ctx = dash.callback_context
 
@@ -415,24 +404,20 @@ if __name__ == '__main__':
 			seg1_dict = d1['seg1']
 			seg2_dict = d1['seg2']
 
-			print('seg1_dict=', seg1_dict)
-			print('seg2_dict=', seg2_dict)
-
 			users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, seg1_dict, seg2_dict)
 			
 			if d.empty:
 				raise Exception('empty data frames!')
 
-			print('making word clouds')
 			wc1, wc2 = make_wordcloud(d)
-			print('done')
 
 			new_main_figure = generate_main_graph(d)
 
 			print('generated main graph')
 
-			return ['Seg1: ' + '/'.join([str(v) for v in seg1_dict.values()]),
-					'Seg2: ' + '/'.join([str(v) for v in seg2_dict.values()]),
+			return [
+			# 'Seg1: ' + '/'.join([str(v) for v in seg1_dict.values()]),
+			# 		'Seg2: ' + '/'.join([str(v) for v in seg2_dict.values()]),
 					f'data:image/png;base64,{wc1}',
 					f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2',
 					f'data:image/png;base64,{wc2}',
@@ -440,7 +425,7 @@ if __name__ == '__main__':
 					new_main_figure
 					]
 		else:
-			return ['nothing', 'nothing', None, '', None, '', go.Figure()]
+			return [None, '', None, '', go.Figure()]
 
 
 	app.run_server(debug=True)
