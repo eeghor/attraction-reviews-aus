@@ -28,8 +28,8 @@ make_id = lambda pref, text: pref + '_' + text.lower().replace(' ','')
 scale_marker = lambda fscore: 4 if abs(fscore) < 0.2 else 6 if 0.2 <= abs(fscore) <=0.4 else 8
 filter_df = lambda df, seg1_dict, seg2_dict: (selector(df, seg1_dict), selector(df, seg2_dict))
 
-default_segs = {1: {'age': 'all ages', 'gender': 'm'},
-				2: {'age': 'all ages', 'gender': 'f'}}
+default_segs = {1: {'gender': 'm'},
+				2: {'gender': 'f'}}
 
 def _make_seg_card(txt):
 	
@@ -37,14 +37,8 @@ def _make_seg_card(txt):
 					dbc.CardHeader([
 						dbc.Row([
 						dbc.Button(id=make_id('badge', txt), 
-							children=txt, color='info', size='sm', outline=True)
-						# dbc.Nav(dbc.NavItem(dbc.NavLink(id=make_id('nl', txt), 
-						# 								children='segment description', 
-						# 								disabled=True, href="#")))
-						]), 
-									]),
-
-					dbc.Collapse(id=make_id('collapse', txt), 
+							children=txt, color='info', size='sm', outline=True),
+						dbc.Collapse(id=make_id('collapse', txt), 
 								 is_open=False,
 								 children=[
 									dbc.Card([
@@ -63,6 +57,10 @@ def _make_seg_card(txt):
 													])
 											]),
 											]),
+						]), 
+									]),
+
+					
 					])
 
 def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
@@ -70,8 +68,6 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 	"""
 	returns (users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d)
 	"""
-
-	print('calculating scaled f-scores...')
 
 	d = pd.DataFrame()
 
@@ -94,6 +90,9 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 	d = d[(d['#seg1'] > min_freq) & (d['#seg2'] > min_freq)]
 
 	"""
+
+	at this stage d is like 
+
 			 #seg1  #seg2
 	go         862    862
 	time      1292   1292
@@ -135,7 +134,7 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 		  
 	return (users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d)
 
-def generate_main_graph(df):
+def generate_main_figure(df):
 
 	layout = go.Layout(
 				hovermode= 'closest',
@@ -201,6 +200,12 @@ def generate_main_graph(df):
 
 def make_wordcloud(df):
 
+	"""
+	returns a list of two word clouds (for segments 1 and 2)
+	"""
+
+	print('creating word clouds...')
+
 	wc1 = WordCloud(background_color='white', 
 					width=600, height=300, max_words=300).generate_from_frequencies(df[['#seg1']].to_dict()['#seg1'])
 
@@ -220,6 +225,115 @@ def make_wordcloud(df):
 		pngs.append(img_b64)
 	
 	return pngs
+
+def create_app_layout(df):
+
+	# create word clouds for both segments
+	wc1, wc2 = make_wordcloud(df)
+
+	# figure
+	fig = generate_main_figure(df)
+
+	# navigation bar
+	navbar = dbc.NavbarSimple(brand='TripAdvisor Review Comparison', 
+								sticky='top', 
+								brand_style={'font-size': 22, 'color': '#1773C3'},
+								children=Img(src='assets/melbourne.png', height='30px'))
+
+	body = dbc.Container([
+					dbc.Row([
+						dbc.CardGroup([
+						dbc.Col([dbc.Card([
+											dbc.CardBody([dbc.CardImg(id='wc1', src=f'data:image/png;base64,{wc1}')]),
+											dbc.CardFooter(Span(id='wc1_text', children='Segment 1 word cloud'))
+											]), 
+								 dbc.Card([
+											dbc.CardBody([dbc.CardImg(id='wc2', src=f'data:image/png;base64,{wc2}')]),
+											dbc.CardFooter(Span(id='wc2_text', children='Segment 2 word cloud'))
+											]),
+								 dbc.Card([
+											dbc.CardBody([dbc.CardText(id='seg_info_text_line1', children='', 
+											style={'font-size': 18, 'background-color': '#FAF4A0'}),
+											dbc.CardText(id='seg_info_text_line2', children='', 
+											style={'font-size': 18, 'background-color': '#76F238'})
+											])])
+								 ], md=4),
+
+						dbc.Col([dbc.Card([
+											dbc.CardBody([dcc.Graph(id='main_graph', figure=fig)])
+											]), dbc.Card([dbc.CardBody([
+												dbc.Row([
+												Div([
+												dbc.Button('Seg 1', 
+															outline=True, 
+															color='success', 
+															id='test_b1')], style={'width': '10%'}),
+												Div([
+												dbc.Button('Seg 2', 
+															outline=True, 
+															color='success', 
+															id='test_b2')], style={'width': '10%'}),
+
+												Div(id='seg1nav', children=[
+												dbc.Nav(children=[
+												dbc.DropdownMenu(label=it, 
+														children=[dbc.DropdownMenuItem(
+																			id=make_id(make_id('mix', 'da'), c), 
+																			children=c) 
+															for c in seg_options.get(it, None)], 
+														bs_size="sm", 
+														nav=True, 
+														style={'font-size': 14}) for it in seg_options 
+												
+													], justified=True)], style={'display': 'none', 'width': '70%'}),
+
+												Div(id='seg2nav', children=[
+												dbc.Nav(children=[
+												dbc.DropdownMenu(label=it, 
+														children=[dbc.DropdownMenuItem(
+																			id=make_id(make_id('mix', 'du'), c), 
+																			children=c) 
+															for c in seg_options.get(it, None)], 
+														bs_size="sm", 
+														nav=True, 
+														style={'font-size': 14}) for it in seg_options 
+												
+													], justified=True)], style={'display': 'none', 'width': '70%'}),
+												
+												Div([
+												dbc.Button('OK', 
+															outline=True, 
+															color='success', 
+															id='test_ok')], style={'width': '10%'})
+
+												])
+
+												])])], md=8)
+						], style={'display': 'flex'})
+							]),
+					Br(),
+					dbc.Row([
+						Div([
+							dbc.Row([
+									dbc.Col([_make_seg_card('Segment 1')]),
+									dbc.Col([_make_seg_card('Segment 2')]),
+									])
+							], style={'width': '92%'}),
+						Div([
+									dbc.Col([dbc.Button('OK', 
+										outline=True, 
+										color='success', 
+										id='update_everything')])
+							], style={'width': '8%'})
+							]),
+					# hidden Div to keep selector description as a string
+						Div(id='selector description', 
+							style={'display': 'none'})
+						])
+
+	return Div([navbar, body])
+
+
 
 if __name__ == '__main__':
 
@@ -244,62 +358,42 @@ if __name__ == '__main__':
 				opts_upd += [opt]
 				seg_options[what] = opts_upd
 
-	print('working with default sigments..')
+	print('working with default segments..')
 
 	users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, default_segs[1], default_segs[2])
 
-	print('making word clouds...')
-	wc1, wc2 = make_wordcloud(d)
-	print('done')
+	print(d.head())
+	app.layout = create_app_layout(d)
+	
+	@app.callback(
+		[Output('seg1nav', 'style'), 
+			Output('seg2nav', 'style'),
+				Output('test_b1', 'active'), 
+					Output('test_b2', 'active')],
+		[Input('test_b1', 'n_clicks'), Input('test_b2', 'n_clicks')])
 
-	navbar = dbc.NavbarSimple(brand='TripAdvisor Reviews for Melbourne', sticky='top', style={'font-size': 22})
+	def tc_test(nclicks_seg1, nclicks_seg2):
 
-	body = dbc.Container([
-					dbc.Row([
-						dbc.CardGroup([
-						dbc.Col([dbc.Card([
-											dbc.CardBody([dbc.CardImg(id='wc1', src=f'data:image/png;base64,{wc1}')]),
-											dbc.CardFooter(Span(id='wc1_text', children='Segment 1 word cloud'))
-											]), 
-								 dbc.Card([
-											dbc.CardBody([dbc.CardImg(id='wc2', src=f'data:image/png;base64,{wc2}')]),
-											dbc.CardFooter(Span(id='wc2_text', children='Segment 2 word cloud'))
-											]),
-								 dbc.Card([
-											dbc.CardBody([dbc.CardText(id='seg_info_text_line1', children='', 
-											style={'font-size': 18, 'background-color': '#FAF4A0'}),
-											dbc.CardText(id='seg_info_text_line2', children='', 
-											style={'font-size': 18, 'background-color': '#1BF022'})
-											])])
-								 ], md=4),
+		styles = [{'display': 'none', 'width': '70%'}, {'display': 'none', 'width': '70%'}]
+		actives = [False, False]
 
-						dbc.Col([dbc.Card([
-											dbc.CardBody([dcc.Graph(id='main_graph', figure=generate_main_graph(d))])
-											])], md=8)
-						])
-							]),
-					Br(),
-					dbc.Row([
-						Div([
-							dbc.Row([
-									dbc.Col([_make_seg_card('Segment 1')]),
-									dbc.Col([_make_seg_card('Segment 2')]),
-									])
-							], style={'width': '92%'}),
-						Div([
-									dbc.Col([dbc.Button('OK', 
-										outline=True, 
-										color='success', 
-										id='update_everything')])
-							], style={'width': '8%'})
-							]),
-					# hidden Div to keep selector description as a string
-						Div(id='selector description', 
-							style={'display': 'none'})
-						])
+		changed = dash.callback_context.triggered
 
-	app.layout = Div([navbar, body])
-		
+		if changed:
+
+			if (changed[0]['prop_id'] == 'test_b1.n_clicks') and changed[0]['value']:
+
+				styles = [{'display': 'inline-block', 'width': '70%'}, {'display': 'none', 'width': '70%'}]
+				actives = [True, False]
+
+			elif (changed[0]['prop_id'] == 'test_b2.n_clicks') and changed[0]['value']:
+
+				styles = [{'display': 'none', 'width': '70%'}, {'display': 'inline-block', 'width': '70%'}]
+				actives = [False, True]
+
+		return styles + actives
+
+
 	# collapse callback
 	@app.callback(
 		[Output('collapse_segment1', 'is_open'), Output('collapse_segment2', 'is_open')],
@@ -367,8 +461,8 @@ if __name__ == '__main__':
 
 		sel = json.dumps({**dict_seg1, **dict_seg2})
 
-		wrd1 = 'Seg 1:' + '/'.join([seg_options[what][max_idx1[what]] for what in seg_options])
-		wrd2 = 'Seg 2:' +'/'.join([seg_options[what][max_idx2[what]] for what in seg_options])
+		wrd1 = 'Seg 1: ' + '/'.join([seg_options[what][max_idx1[what]] for what in seg_options])
+		wrd2 = 'Seg 2: ' +'/'.join([seg_options[what][max_idx2[what]] for what in seg_options])
 
 		return (sel, wrd1, wrd2)
 
@@ -411,7 +505,7 @@ if __name__ == '__main__':
 
 			wc1, wc2 = make_wordcloud(d)
 
-			new_main_figure = generate_main_graph(d)
+			new_main_figure = generate_main_figure(d)
 
 			print('generated main graph')
 
