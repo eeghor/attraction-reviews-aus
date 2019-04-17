@@ -4,6 +4,7 @@ import dash_core_components as dcc
 from dash_html_components import Img, Col, Div, Br, Span
 
 from dash.dependencies import Input, Output, State
+from dash.exceptions import PreventUpdate
 
 import dash_bootstrap_components as dbc
 import numpy as np
@@ -28,8 +29,9 @@ make_id = lambda pref, text: pref + '_' + text.lower().replace(' ','')
 scale_marker = lambda fscore: 4 if abs(fscore) < 0.2 else 6 if 0.2 <= abs(fscore) <=0.4 else 8
 filter_df = lambda df, seg1_dict, seg2_dict: (selector(df, seg1_dict), selector(df, seg2_dict))
 
-default_segs = {1: {'gender': 'm'},
-				2: {'gender': 'f'}}
+attr_list = ['age', 'gender', 'type', 'country', 'attraction type']
+
+seg_descr_from_dict = lambda dict_: '/'.join([dict_[what] for what in attr_list])
 
 def _make_seg_card(txt):
 	
@@ -45,6 +47,7 @@ def _make_seg_card(txt):
 										dbc.CardBody([
 											dbc.Nav([
 												dbc.DropdownMenu(label=it, 
+														direction='right',
 														children=[dbc.DropdownMenuItem(
 																			id=make_id(make_id('mi', txt), c), 
 																			children=c) 
@@ -204,13 +207,11 @@ def make_wordcloud(df):
 	returns a list of two word clouds (for segments 1 and 2)
 	"""
 
-	print('creating word clouds...')
-
 	wc1 = WordCloud(background_color='white', 
-					width=600, height=300, max_words=300).generate_from_frequencies(df[['#seg1']].to_dict()['#seg1'])
+					width=600, height=340, max_words=300).generate_from_frequencies(df[['#seg1']].to_dict()['#seg1'])
 
 	wc2 = WordCloud(background_color='white', 
-					   width=600, height=300, max_words=300).generate_from_frequencies(df[['#seg2']].to_dict()['#seg2'])
+					   width=600, height=340, max_words=300).generate_from_frequencies(df[['#seg2']].to_dict()['#seg2'])
 
 	pngs = []
 
@@ -226,10 +227,7 @@ def make_wordcloud(df):
 	
 	return pngs
 
-def create_app_layout(df):
-
-	# create word clouds for both segments
-	wc1, wc2 = make_wordcloud(df)
+def create_app_layout(df, wc1, wc2, users_in_seg1, users_in_seg2, reviews_in_seg1, reviews_in_seg2, seg1_descr, seg2_descr):
 
 	# figure
 	fig = generate_main_figure(df)
@@ -238,7 +236,9 @@ def create_app_layout(df):
 	navbar = dbc.NavbarSimple(brand='Tourist Review Comparison', 
 								sticky='top', 
 								brand_style={'font-size': 22, 'color': '#1773C3'},
-								children=[Img(src='assets/tripavisor_logo.png', height='36px'), Img(src='assets/melbourne.png', height='30px')])
+								children=[Img(src='assets/tripavisor_logo.png', height='36px'), 
+								Img(src='assets/melbourne.png', height='30px')],
+								style={'z-index': 1})
 
 	body = dbc.Container([
 					dbc.Row([
@@ -246,19 +246,19 @@ def create_app_layout(df):
 						dbc.Col([dbc.Card([
 											dbc.CardBody([dbc.CardImg(id='wc1', src=f'data:image/png;base64,{wc1}')]),
 											dbc.CardFooter(
-												Span(id='wc1_text', children='Segment 1 word cloud')
+												Span(id='wc1_text', children=seg1_descr)
 												)
 											], style={'height': '280px'}), 
 								 dbc.Card([
 											dbc.CardBody([dbc.CardImg(id='wc2', src=f'data:image/png;base64,{wc2}')]),
 											dbc.CardFooter(
-												Span(id='wc2_text', children='Segment 2 word cloud')
+												Span(id='wc2_text', children=seg2_descr)
 												)
 											], style={'height': '280px'}),
 								 dbc.Card([
-											dbc.CardBody([dbc.CardText(id='seg_info_text_line1', children='', 
+											dbc.CardBody([dbc.CardText(id='seg_info_text_line1', children=f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2', 
 											style={'font-size': 18, 'background-color': '#FAF4A0'}),
-											dbc.CardText(id='seg_info_text_line2', children='', 
+											dbc.CardText(id='seg_info_text_line2', children=f'Reviews: {reviews_in_seg1:,}/{reviews_in_seg2:,} in Seg1/Seg2', 
 											style={'font-size': 18, 'background-color': '#76F238'})
 											])], style={'height': '112px'})
 								 ], md=4),
@@ -283,7 +283,7 @@ def create_app_layout(df):
 												dbc.DropdownMenu(label=it, 
 														children=[dbc.DropdownMenuItem(
 																			id=make_id(make_id('mix', 'da'), c), 
-																			children=c) 
+																			children=c, style={'z-index': 2, 'position': 'relative'}) 
 															for c in seg_options.get(it, None)], 
 														bs_size="sm", 
 														nav=True, 
@@ -314,22 +314,6 @@ def create_app_layout(df):
 												])])], md=8)
 						], style={'display': 'flex'})
 							]),
-					# Br(),
-					# dbc.Row([
-					# 	Div([
-					# 		dbc.Row([
-					# 				dbc.Col([_make_seg_card('Segment 1')]),
-					# 				dbc.Col([_make_seg_card('Segment 2')]),
-					# 				])
-					# 		], style={'width': '92%'}),
-					# 	Div([
-					# 				dbc.Col([dbc.Button('OK', 
-					# 					outline=True, 
-					# 					color='success', 
-					# 					id='update_everything')])
-					# 		], style={'width': '8%'})
-					# 		]),
-					# hidden Div to keep selector description as a string
 						Div(id='selector description', 
 							style={'display': 'none'})
 						])
@@ -340,33 +324,31 @@ def create_app_layout(df):
 
 if __name__ == '__main__':
 
-	app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-	server = app.server
-
-	data = pd.read_csv('data/data.csv', 
+	data = pd.read_csv('data/data.csv.gz', 
 					parse_dates=['date_of_experience'],
 					infer_datetime_format=True)
 
 	attrs = json.load(open('data/attributes.json'))
 	
 	seg_options = {what: list(attrs[what].values()) for what in attrs}
-	
-	# pre-filter segment options
-	for what in seg_options:
-		opts_upd = [seg_options[what][0]]
-		for opt in seg_options[what][1:]:
-			df_ = data[data[what].apply(lambda x: str(opt) in str(x))]
-			c = set(df_['review_id'])
-			if c and len(c) > 99:
-				opts_upd += [opt]
-				seg_options[what] = opts_upd
 
-	print('working with default segments..')
+	default_segs = {1: {'age': 'all ages', 'gender': 'm', 'type': 'all types', 
+					'country': 'all countries', 'attraction type': 'all attraction types'},
+					2: {'age': 'all ages', 'gender': 'f', 'type': 'all types', 
+					'country': 'all countries', 'attraction type': 'all attraction types'}}
+
+	seg1_descr = 'Seg 1: ' + seg_descr_from_dict(default_segs[1])
+	seg2_descr = 'Seg 2: ' + seg_descr_from_dict(default_segs[2])
 
 	users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, default_segs[1], default_segs[2])
+	# create word clouds for both segments
+	wc1, wc2 = make_wordcloud(d)
 
-	print(d.head())
-	app.layout = create_app_layout(d)
+	external_stylesheets = [dbc.themes.BOOTSTRAP]
+	app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+	# server = app.server
+	app.layout = create_app_layout(d, wc1, wc2, users_in_seg1, users_in_seg2, 
+									reviews_in_seg1, reviews_in_seg2, seg1_descr, seg2_descr)
 	
 	@app.callback(
 		[Output('seg1nav', 'style'), 
@@ -399,6 +381,9 @@ if __name__ == '__main__':
 				actives = [False, True]
 				ok_style['display'] = 'inline'
 
+			elif changed[0]['value'] is None:
+				raise PreventUpdate
+
 		return styles + actives + [ok_style]
 
 	@app.callback([Output('selector description', 'children'),
@@ -414,6 +399,9 @@ if __name__ == '__main__':
 		)
 
 	def specify_segments(*lst):
+
+		if all([_ is None for _ in lst]):
+			raise PreventUpdate
 
 		lengths = {what: len(seg_options[what]) for what in seg_options}
 
@@ -455,7 +443,7 @@ if __name__ == '__main__':
 	def update(n, dict_str):
 
 		if (not n) or (not dict_str):
-			return [None, '', None, '', go.Figure()]
+			raise PreventUpdate
 		
 		ctx = dash.callback_context
 
@@ -481,11 +469,7 @@ if __name__ == '__main__':
 
 			new_main_figure = generate_main_figure(d)
 
-			print('generated main graph')
-
 			return [
-			# 'Seg1: ' + '/'.join([str(v) for v in seg1_dict.values()]),
-			# 		'Seg2: ' + '/'.join([str(v) for v in seg2_dict.values()]),
 					f'data:image/png;base64,{wc1}',
 					f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2',
 					f'data:image/png;base64,{wc2}',
@@ -494,135 +478,5 @@ if __name__ == '__main__':
 					]
 		else:
 			return [None, '', None, '', go.Figure()]
-
-
-
-	# # collapse callback
-	# @app.callback(
-	# 	[Output('collapse_segment1', 'is_open'), Output('collapse_segment2', 'is_open')],
-	# 	[Input('badge_segment1', 'n_clicks'), Input('badge_segment2', 'n_clicks')],
-	# 	[State('collapse_segment1', 'is_open'), State('collapse_segment2', 'is_open')])
-
-	# def toggle_collapse(nclicks_seg1, nclicks_seg2, is_open_seg1, is_open_seg2):
-
-	# 	"""
-	# 	n_clicks is how many times clicked so far; callback triggers whenever n_clicks changes
-	# 	"""
-
-	# 	upd_open_states = [is_open_seg1, is_open_seg2]
-
-	# 	changed = dash.callback_context.triggered
-
-	# 	if not changed:
-	# 		print('returning current states, nothing changed!')
-	# 		return upd_open_states
-
-	# 	what_changed = changed[0].get('prop_id', None)
-	# 	new_value = changed[0].get('value', None)
-
-	# 	if what_changed:
-
-	# 		if (what_changed == 'badge_segment1.n_clicks') and new_value:
-	# 			upd_open_states[0] = (not is_open_seg1)
-	# 		elif (what_changed == 'badge_segment2.n_clicks') and new_value:
-	# 			upd_open_states[1] = (not is_open_seg2)
-
-	# 	return upd_open_states
-
-	# @app.callback([Output('selector description', 'children'),
-	# 				Output('wc1_text', 'children'),
-	# 				Output('wc2_text', 'children')
-	# 				],
-	# 				[Input(make_id(make_id('mi', 'Segment 1'), _), 'n_clicks_timestamp') 
-	# 						for what in seg_options 
-	# 						for _ in seg_options[what]] + \
-	# 				[Input(make_id(make_id('mi', 'Segment 2'), _), 'n_clicks_timestamp') 
-	# 						for what in seg_options 
-	# 						for _ in seg_options[what]]
-	# 	)
-
-	# def specify_segments(*lst):
-
-	# 	lengths = {what: len(seg_options[what]) for what in seg_options}
-
-	# 	span_ends1 = np.cumsum([lengths[what] for what in seg_options])
-	# 	span_ends2 = span_ends1 + span_ends1[-1]
-
-	# 	spans1 = {what: (span_ends1[i-1] if i > 0 else 0, span_ends1[i]) for i, what in enumerate(seg_options)}
-	# 	spans2 = {what: (span_ends2[i-1] if i > 0 else span_ends1[-1], span_ends2[i]) for i, what in enumerate(seg_options)}
-
-	# 	pad_zeroes = lambda lst: [0 if not _ else _ for _ in lst]
-
-	# 	when_clicked1 = {what: pad_zeroes(lst[spans1[what][0]: spans1[what][1]]) for what in seg_options}
-	# 	when_clicked2 = {what: pad_zeroes(lst[spans2[what][0]: spans2[what][1]]) for what in seg_options}
-
-	# 	max_idx1 = {what: when_clicked1[what].index(max(when_clicked1[what])) for what in seg_options}
-	# 	max_idx2 = {what: when_clicked2[what].index(max(when_clicked2[what])) for what in seg_options}
-
-	# 	dict_seg1 = {'seg1': {what: seg_options[what][max_idx1[what]] for what in seg_options}}
-	# 	dict_seg2 = {'seg2': {what: seg_options[what][max_idx2[what]] for what in seg_options}}
-
-	# 	sel = json.dumps({**dict_seg1, **dict_seg2})
-
-	# 	wrd1 = 'Seg 1: ' + '/'.join([seg_options[what][max_idx1[what]] for what in seg_options])
-	# 	wrd2 = 'Seg 2: ' +'/'.join([seg_options[what][max_idx2[what]] for what in seg_options])
-
-	# 	return (sel, wrd1, wrd2)
-
-	# when clicked the OK button, update everything
-	# @app.callback(
-	# 	[
-	# 		Output('wc1', 'src'), 
-	# 		Output('seg_info_text_line1', 'children'),
-	# 		Output('wc2', 'src'),
-	# 		Output('seg_info_text_line2', 'children'),
-	# 		Output('main_graph', 'figure')],
-	# 	[Input('update_everything', 'n_clicks')],
-	# 	[State('selector description', 'children')]
-	# 	)
-
-	# def update(n, dict_str):
-
-	# 	if (not n) or (not dict_str):
-	# 		return [None, '', None, '', go.Figure()]
-		
-	# 	ctx = dash.callback_context
-
-	# 	if not ctx.triggered:
-	# 		pass
-	# 	else:
-	# 		changed = ctx.triggered[0]['prop_id']
-
-
-	# 	if (changed == 'update_everything.n_clicks') and dict_str:
-			
-	# 		d1 = json.loads(dict_str)
-		
-	# 		seg1_dict = d1['seg1']
-	# 		seg2_dict = d1['seg2']
-
-	# 		users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, seg1_dict, seg2_dict)
-			
-	# 		if d.empty:
-	# 			raise Exception('empty data frames!')
-
-	# 		wc1, wc2 = make_wordcloud(d)
-
-	# 		new_main_figure = generate_main_figure(d)
-
-	# 		print('generated main graph')
-
-	# 		return [
-	# 		# 'Seg1: ' + '/'.join([str(v) for v in seg1_dict.values()]),
-	# 		# 		'Seg2: ' + '/'.join([str(v) for v in seg2_dict.values()]),
-	# 				f'data:image/png;base64,{wc1}',
-	# 				f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2',
-	# 				f'data:image/png;base64,{wc2}',
-	# 				f'Reviews: {reviews_in_seg1:,}/{reviews_in_seg2:,} in Seg1/Seg2',
-	# 				new_main_figure
-	# 				]
-	# 	else:
-	# 		return [None, '', None, '', go.Figure()]
-
 
 	app.run_server(debug=True)
