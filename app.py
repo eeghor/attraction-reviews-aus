@@ -320,13 +320,38 @@ def create_app_layout(df, wc1, wc2, users_in_seg1, users_in_seg2, reviews_in_seg
 
 	return Div([navbar, body])
 
+def load_data(source, filename='data.csv.gz'):
+
+	if source == 'gcp':
+
+		from google.oauth2.service_account import Credentials 
+		from google.cloud.storage.client import Client
+
+		try:
+			creds = Credentials.from_service_account_file('conf/ta-melbourne-86b9ada15f17.json')
+		except:
+			raise Exception('failed to load credentials from json!')
+
+		try:
+			Client(project='ta-melbourne', credentials=creds) \
+				.get_bucket('ta-melbourne-data') \
+				.blob('data.csv.gz') \
+				.download_to_filename(f'data/{filename}')
+		except:
+			raise Exception('failed to download data file from GCS!')
+
+	elif source == 'local':
+		pass
+
+	return pd.read_csv(f'data/{filename}', 
+					parse_dates=['date_of_experience'],
+					infer_datetime_format=True)
 
 
 if __name__ == '__main__':
 
-	data = pd.read_csv('data/data.csv.gz', 
-					parse_dates=['date_of_experience'],
-					infer_datetime_format=True)
+
+	data = load_data(source='gcp', filename='data.csv.gz')
 
 	attrs = json.load(open('data/attributes.json'))
 	
