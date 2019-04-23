@@ -66,23 +66,19 @@ def _make_seg_card(txt):
 					
 					])
 
-def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
+
+def calculate_scaled_fscores(rev_seg1, rev_seg2):
 
 	"""
 	returns (users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d)
 	"""
+	users_in_seg1 = reviews_in_seg1 = users_in_seg2 = reviews_in_seg2 = 0
 
 	d = pd.DataFrame()
-
-	rev_seg1, rev_seg2 = filter_df(df, seg1_dict, seg2_dict)
 
 	# collect some stats
 	users_in_seg1, reviews_in_seg1 = len(set(rev_seg1['by_user'])), len(set(rev_seg1['review_id']))
 	users_in_seg2, reviews_in_seg2 = len(set(rev_seg2['by_user'])), len(set(rev_seg2['review_id']))	
-
-	if rev_seg1.empty or rev_seg2.empty:
-		print('no scaled f-scores can be calculated due to empty segment data frames!')
-		return (users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d)
 
 	d = pd.DataFrame.from_dict(Counter(chain.from_iterable(rev_seg1['lemmatised'].str.split())), 
 											orient='index').rename(columns={0: '#seg1'}) \
@@ -90,7 +86,7 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 						orient='index').rename(columns={0: '#seg2'}),
 					 how='outer').fillna(0)
 
-	d = d[(d['#seg1'] > min_freq) & (d['#seg2'] > min_freq)]
+	# d = d[(d['#seg1'] > min_freq) & (d['#seg2'] > min_freq)]
 
 	"""
 
@@ -111,8 +107,8 @@ def calculate_scaled_fscores(df, min_freq, seg1_dict, seg2_dict):
 	d['fseg1'] = d['#seg1']/d['#seg1'].sum()
 	d['fseg2'] = d['#seg2']/d['#seg2'].sum()
 
-	d['fscseg1'] = d.apply(lambda x: hmean([x['pseg1'], x['fseg1']]) if x['pseg1'] > 0 and x['fseg1'] > 0 else 0, axis=1)
-	d['fscseg2'] = d.apply(lambda x: hmean([x['pseg2'], x['fseg2']]) if x['pseg2'] > 0 and x['fseg2'] > 0 else 0, axis=1)
+	d['fscseg1'] = d.apply(lambda x: hmean([x['pseg1'], x['fseg1']]) if (x['pseg1'] > 0 and x['fseg1'] > 0) else 0, axis=1)
+	d['fscseg2'] = d.apply(lambda x: hmean([x['pseg2'], x['fseg2']]) if (x['pseg2'] > 0 and x['fseg2'] > 0) else 0, axis=1)
 
 	# normalize pseg1
 	d['pseg1n'] = normcdf(d['pseg1'])
@@ -291,6 +287,9 @@ def create_app_layout(df, wc1, wc2, users_in_seg1, users_in_seg2, reviews_in_seg
 												
 													], justified=True)], style={'display': 'none', 'width': '70%'}),
 
+												Div(dbc.Alert('Segments Unavailable!', id="alert-empty-seg", dismissable=True, is_open=True, color='warning'), 
+													style={'display': 'none', 'width': '70%'}),
+
 												Div(id='seg2nav', children=[
 												dbc.Nav(children=[
 												dbc.DropdownMenu(label=it, 
@@ -351,7 +350,7 @@ def load_data(source, filename='data.csv.gz'):
 if __name__ == '__main__':
 
 
-	data = load_data(source='gcp', filename='data.csv.gz')
+	data = load_data(source='local', filename='data.csv.gz')
 
 	attrs = json.load(open('data/attributes.json'))
 	
@@ -365,9 +364,13 @@ if __name__ == '__main__':
 	seg1_descr = 'Seg 1: ' + seg_descr_from_dict(default_segs[1])
 	seg2_descr = 'Seg 2: ' + seg_descr_from_dict(default_segs[2])
 
-	users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, default_segs[1], default_segs[2])
-	# create word clouds for both segments
-	wc1, wc2 = make_wordcloud(d)
+	rev_seg1, rev_seg2 = filter_df(data, default_segs[1], default_segs[2])
+
+	if (not rev_seg1.empty) and (not rev_seg2.empty):
+
+		users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(rev_seg1, rev_seg2)
+		# create word clouds for both segments
+		wc1, wc2 = make_wordcloud(d)
 
 	external_stylesheets = [dbc.themes.BOOTSTRAP]
 	app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -460,12 +463,23 @@ if __name__ == '__main__':
 			Output('seg_info_text_line1', 'children'),
 			Output('wc2', 'src'),
 			Output('seg_info_text_line2', 'children'),
-			Output('main_graph', 'figure')],
+			Output('main_graph', 'figure'),
+			Output('seg1nav', 'style'),
+			Output('seg2nav', 'style'),
+			Output('alert-empty-seg', 'style')],
 		[Input('update_everything', 'n_clicks')],
-		[State('selector description', 'children')]
+		[State('selector description', 'children'),
+		 State('wc1', 'src'), 
+		 State('seg_info_text_line1', 'children'),
+		 State('wc2', 'src'),
+		 State('seg_info_text_line2', 'children'),
+		 State('main_graph', 'figure'),
+		 State('seg1nav', 'style'),
+		 State('seg2nav', 'style')
+		]
 		)
 
-	def update(n, dict_str):
+	def update(n, dict_str, wc1_source_str, seg_info_line1, wc2_source_str, seg_info_line2, current_main_fig, current_seg1_nav, current_seg2_nav):
 
 		if (not n) or (not dict_str):
 			raise PreventUpdate
@@ -480,28 +494,45 @@ if __name__ == '__main__':
 
 		if (changed == 'update_everything.n_clicks') and dict_str:
 			
+			# parse the string to find out which segment to show
 			d1 = json.loads(dict_str)
-		
-			seg1_dict = d1['seg1']
-			seg2_dict = d1['seg2']
+			# try to extract segment data frames
+			rev_seg1, rev_seg2 = filter_df(data, d1['seg1'], d1['seg2'])
+			print('extracted segments:')
+			print(d1['seg1'])
+			print(d1['seg2'])
+			empty_segs = [s.empty for s in [rev_seg1, rev_seg2]]
+			print('empty_segs=', empty_segs)
 
-			users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(data, 4, seg1_dict, seg2_dict)
+			if sum(empty_segs) == 0:
+
+				users_in_seg1, reviews_in_seg1, users_in_seg2, reviews_in_seg2, d = calculate_scaled_fscores(rev_seg1, rev_seg2)
 			
-			if d.empty:
-				raise Exception('empty data frames!')
+				wc1, wc2 = make_wordcloud(d)
 
-			wc1, wc2 = make_wordcloud(d)
+				new_main_figure = generate_main_figure(d)
 
-			new_main_figure = generate_main_figure(d)
+				return [
+						f'data:image/png;base64,{wc1}',
+						f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2',
+						f'data:image/png;base64,{wc2}',
+						f'Reviews: {reviews_in_seg1:,}/{reviews_in_seg2:,} in Seg1/Seg2',
+						new_main_figure,
+						current_seg1_nav,
+					    current_seg2_nav,
+						{'display': 'none', 'width': '70%'}
+						]
+			else:
+				print(f'empty segments!')
 
-			return [
-					f'data:image/png;base64,{wc1}',
-					f'Users: {users_in_seg1:,}/{users_in_seg2:,} in Seg1/Seg2',
-					f'data:image/png;base64,{wc2}',
-					f'Reviews: {reviews_in_seg1:,}/{reviews_in_seg2:,} in Seg1/Seg2',
-					new_main_figure
-					]
-		else:
-			return [None, '', None, '', go.Figure()]
+		print('nothing changed, keeping current values...')
+		return [wc1_source_str,
+				seg_info_line1,
+				wc2_source_str,
+				seg_info_line2,
+				current_main_fig,
+				{'display': 'none', 'width': '70%'},
+				{'display': 'none', 'width': '70%'},
+				{'display': 'inline', 'width': '70%'}]
 
 	app.run_server(debug=True)

@@ -4,7 +4,12 @@ from scipy.stats import norm
 def selector(df, req_dict):
 
     """
-    returns a filtered data frame created from data frame df as specified by dictionary req_dict; 
+    returns a pandas data frame produces by filtering df according to the requirements described
+    in dictionary req_dict; for example, if req_dict = {'age': '20-24', 'gender': 'm'} the resulting data frame 
+    will only contain males aged 20-24;
+
+    * if the filtered data frame becomes empty, the function returns this empty data frame without issuing any warnings or
+      exceptions
     """
 
     if not isinstance(df, pd.DataFrame):
